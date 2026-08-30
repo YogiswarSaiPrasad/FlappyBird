@@ -367,7 +367,6 @@ function drawPipes(){
   }
 }
 
-// Coins
 function drawCoins(){
   for(const c of gs.coinItems){
     if(c.collected)continue;
@@ -381,7 +380,6 @@ function drawCoins(){
   }
 }
 
-// Power-ups
 const PU_COLOR={heart:'#FF3355',shield:'#3388FF',magnet:'#BB44FF'};
 function drawPowerups(){
   for(const p of gs.powerups){
@@ -400,7 +398,6 @@ function drawPowerups(){
   }
 }
 
-// Enemies
 function drawEnemies(){
   for(const e of gs.enemies){
     if(e.dead)continue;
@@ -426,7 +423,7 @@ function drawBoss(){
   ctx.strokeStyle='#FF0000';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,40,0,Math.PI*2);ctx.stroke();
   ctx.fillStyle='#FF6600';ctx.beginPath();ctx.arc(-14,-12,10,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(14,-12,10,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-14,-12,5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(14,-12,5,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle='#FF0000';ctx.lineWidth=3;
+  // reuse same strokeStyle/lineWidth from above
   ctx.beginPath();ctx.moveTo(-22,-22);ctx.lineTo(-6,-18);ctx.stroke();
   ctx.beginPath();ctx.moveTo(22,-22);ctx.lineTo(6,-18);ctx.stroke();
   ctx.beginPath();ctx.arc(0,10,18,0.3,Math.PI-0.3);ctx.stroke();
@@ -437,7 +434,6 @@ function drawBoss(){
   ctx.restore();
 }
 
-// Bullets
 function drawBullets(){
   for(const b of gs.bullets){
     ctx.save();ctx.translate(b.x,b.y);
@@ -452,7 +448,6 @@ function drawBullets(){
   }
 }
 
-// Particles
 function spawnParticles(x,y,color,count=8){
   if(save.settings.graphics==='low')return;
   for(let i=0;i<count;i++){gs.particles.push({x,y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,life:30+Math.random()*15,maxLife:45,r:2+Math.random()*3,color});}
@@ -495,7 +490,7 @@ function spawnPipe(){
   const p={x:W,topH,scored:false};
   gs.pipes.push(p);
   const gapMid=topH+gs.level.gap/2;
-  const n=save.selectedBird==='sparrow'?5:3;
+  const n=save.selectedBird==='sparrow'?6:3; // sparrow skill: exactly 2× coins
   for(let i=0;i<n;i++){gs.coinItems.push({x:W+12+i*16,y:gapMid+(Math.random()-0.5)*(gs.level.gap*0.5),collected:false});}
   gs.puCountdown--;
   if(gs.puCountdown<=0){
@@ -634,10 +629,10 @@ function updateGame(){
     if(gs.boss&&!gs.boss.dead&&Math.abs(b.x-gs.boss.x)<46&&Math.abs(b.y-gs.boss.y)<46){gs.boss.hp--;b.hit=true;spawnParticles(gs.boss.x,gs.boss.y,'#FF6600',5);SFX.hit();if(gs.boss.hp<=0){gs.boss.dead=true;gs.canShoot=false;spawnParticles(gs.boss.x,gs.boss.y,'#FF4400',25);gs.score+=10;}}
   }
   gs.bullets=gs.bullets.filter(b=>!b.hit&&b.x<W+20);
-  // enemy bullets: shield absorbs, otherwise takeDamage
+  // enemy bullets: let takeDamage() handle shield/invincibility so shield is consumed correctly
   for(const b of gs.enemyBullets){
     b.x+=b.vx;b.y+=b.vy;
-    if(gs.shieldTimer<=0&&gs.invincible<=0&&Math.sqrt((BX-b.x)**2+(gs.birdY-b.y)**2)<BR+5){b.hit=true;takeDamage();}
+    if(Math.sqrt((BX-b.x)**2+(gs.birdY-b.y)**2)<BR+5){b.hit=true;takeDamage();}
   }
   gs.enemyBullets=gs.enemyBullets.filter(b=>!b.hit&&b.x>-20&&b.x<W+20&&b.y>-20&&b.y<H+20);
   // pipe AABB collision (top or bottom pillar)
@@ -957,6 +952,19 @@ document.addEventListener('keydown',e=>{
     if(back){ SFX.click(); back(); }
   }
 });
+
+// Android hardware back button — navigate back instead of closing the app
+function handleAndroidBack(){
+  const back=BACK_SCREEN[screen];
+  if(back){ SFX.click(); back(); }
+  // On WELCOME screen there is no back entry, so the app stays open
+}
+// Capacitor App plugin (most reliable in Capacitor WebView)
+if(window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.App){
+  window.Capacitor.Plugins.App.addListener('backButton',handleAndroidBack);
+}
+// DOM fallback for other WebView environments
+document.addEventListener('backbutton',e=>{ e.preventDefault(); handleAndroidBack(); },false);
 
 // ─── MAIN LOOP ──────────────────────────────────────────────────────────────────
 // Clears canvas, resets btns[], dispatches to current screen's draw (+ update for GAME)

@@ -1,8 +1,18 @@
 {
-  "appId": "com.yourname.flappybird",
-  "appName": "Flappy Bird",
+  "appId": "com.saintswar.flybirdy",
+  "appName": "Fly Birdy",
   "webDir": "www",
   "server": {
     "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#0A0E2A"
+  },
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK",
+      "backgroundColor": "#0A0E2A"
+    }
   }
 }
