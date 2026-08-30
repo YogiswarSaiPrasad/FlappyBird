@@ -1,0 +1,8 @@
+{
+  "appId": "com.yourname.flappybird",
+  "appName": "Flappy Bird",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

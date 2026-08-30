@@ -1,0 +1,64 @@
+name: Build Android APK
+
+# Runs on every push to main branch
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # also allows manual trigger from GitHub Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out your repository files
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Set up Node.js to run Capacitor CLI
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 3. Install Capacitor and its Android plugin
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Java must be ready before cap add android because it triggers a Gradle init
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # 5. Add the Android platform (generates the android/ folder)
+      - name: Add Android platform
+        run: npx cap add android
+
+      # 6. Copy only game files into www/ — avoids bundling node_modules into the APK
+      - name: Prepare web assets in www/
+        run: |
+          mkdir -p www
+          cp index.html style.css script.js manifest.json sw.js www/
+
+      # 7. sync generates capacitor.settings.gradle + copies web assets (cap copy alone skips this)
+      - name: Sync web assets into Android project
+        run: npx cap sync android
+
+      # 8. Make gradlew executable (it loses execute permission on Linux checkout)
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      # 9. Build the debug APK using Gradle
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+        working-directory: android
+
+      # 9. Upload the APK as a downloadable artifact
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flappy-bird-debug
+          # path to the built APK file
+          path: android/app/build/outputs/apk/debug/app-debug.apk

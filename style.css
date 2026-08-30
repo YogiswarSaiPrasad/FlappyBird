@@ -1,0 +1,36 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* dvh shrinks when mobile browser chrome appears, preventing overflow */
+    height: 100dvh;
+    height: 100vh; /* fallback for browsers without dvh */
+    background: #1a1a2e;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+#gameWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.3);
+}
+
+canvas {
+    display: block;
+    cursor: pointer;
+    /* Scale to fill the full viewport height, constrained by width */
+    height: 100dvh;
+    height: 100vh;           /* fallback */
+    width: auto;
+    max-width: 100vw;        /* portrait mobile: width caps first */
+    /* When width caps, let height shrink proportionally */
+    aspect-ratio: 400 / 600;
+    max-height: min(100dvh, calc(100vw * 1.5));
+}
