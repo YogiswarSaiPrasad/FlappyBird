@@ -13,6 +13,9 @@
 <body>
     <div id="gameWrapper">
         <canvas id="game" width="400" height="600"></canvas>
+        <!-- Hidden input so mobile keyboard appears for name entry without using prompt() -->
+        <input id="nameInput" type="text" maxlength="12" autocomplete="off" autocorrect="off" spellcheck="false"
+          style="position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:0;left:0;border:none;outline:none;">
     </div>
     <script src="script.js"></script>
     <script>

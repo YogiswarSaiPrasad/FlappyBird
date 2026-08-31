@@ -1,7 +1,7 @@
 ﻿"use strict";
 // ─── FLY BIRDY ───────────────────────────────────────────────────────────────
 // Pure HTML5 Canvas game. No external libraries.
-// Logical canvas: 400×600. CSS scales via aspect-ratio + 100dvh.
+// Logical canvas: 400×600. CSS stretches to fill the full WebView.
 // State machine: screen variable drives which draw/update function runs each frame.
 // ─────────────────────────────────────────────────────────────────────────────
 const canvas = document.getElementById("game");
@@ -176,6 +176,36 @@ function getActiveSkin(birdKey){
 }
 
 let shopTab='birds'; // persists between shop visits: 'birds' | 'skins'
+
+// ─── NAME ENTRY ──────────────────────────────────────────────────────────────
+// Uses a hidden <input> so the native keyboard appears on mobile (prompt() is unreliable in Capacitor)
+let nameEntry={active:false,text:'',onDone:null};
+function askPlayerName(cb){
+  nameEntry.active=true;nameEntry.text='PLAYER';nameEntry.onDone=cb;
+  const el=document.getElementById('nameInput');
+  if(el){el.value='PLAYER';el.select();el.focus();}
+}
+function submitPlayerName(){
+  const el=document.getElementById('nameInput');
+  const name=((el?el.value:nameEntry.text)||'BIRD').trim().substring(0,12)||'BIRD';
+  nameEntry.active=false;
+  document.getElementById('nameInput').blur();
+  if(nameEntry.onDone) nameEntry.onDone(name.toUpperCase());
+}
+function drawNameEntry(){
+  if(!nameEntry.active)return;
+  const el=document.getElementById('nameInput');
+  if(el) nameEntry.text=el.value; // sync live typing from native keyboard
+  ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,W,H);
+  roundRect(40,185,320,175,14,'#1a1a2e','#FFD700',2);
+  ctx.fillStyle='#FFD700';ctx.font='bold 22px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('🏆 New Top 5!',W/2,218);
+  ctx.fillStyle='#ddd';ctx.font='15px Arial';ctx.fillText('Enter your name:',W/2,248);
+  roundRect(60,262,280,42,8,'#2a2a4a','#FFD700');
+  const display=(nameEntry.text||'').toUpperCase().substring(0,12);
+  ctx.fillStyle='#fff';ctx.font='bold 20px Arial';ctx.fillText(display+'|',W/2,283);
+  btn(100,322,200,46,'Done ✓','#27AE60',submitPlayerName,16);
+}
 
 // ─── POPUP ────────────────────────────────────────────────────────────────────
 // Auto-dismissing overlay message (e.g. "Not enough coins!"). Fades out over last 30 frames.
@@ -531,10 +561,7 @@ function takeDamage(){
         if(gs.mode==='adventure'){
           addHighScore('ADVENTURE',gs.score);
         }else{
-          setTimeout(()=>{
-            const name=(prompt('New top 5! Enter your name:','PLAYER')||'BIRD').trim();
-            addHighScore(name,gs.score);
-          },100);
+          askPlayerName(name=>addHighScore(name,gs.score));
         }
       }
     }
@@ -946,6 +973,7 @@ canvas.addEventListener('pointerup',e=>{
 });
 
 document.addEventListener('keydown',e=>{
+  if(nameEntry.active){ if(e.code==='Enter') submitPlayerName(); return; }
   if(e.code==='Space'){e.preventDefault();resumeAudio();if(screen===S.GAME&&!gs.over&&!gs.won) playerFlap();}
   if(e.code==='KeyP'){
     if(screen===S.GAME&&gs.started&&!gs.over&&!gs.won){screen=S.PAUSED;stopMusic();}
@@ -989,7 +1017,8 @@ function loop(){
       if(gs.won)   drawLevelWon();
       break;
   }
-  drawPopup(); // always on top of everything
+  drawPopup();
+  drawNameEntry(); // always on top — shown when unlimited top-score name is needed
   requestAnimationFrame(loop);
 }
 loop();

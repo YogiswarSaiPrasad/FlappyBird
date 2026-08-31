@@ -1,5 +1,5 @@
 // Service Worker — caches all game files so the app works offline
-const CACHE_NAME = "flappy-bird-v1";
+const CACHE_NAME = "flybirdy-v2";
 const ASSETS = [
     "./",
     "./index.html",
