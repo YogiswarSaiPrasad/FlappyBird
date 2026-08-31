@@ -46,6 +46,8 @@ jobs:
 
       - name: Generate Android launcher icons
         run: |
+          # Remove adaptive icon XMLs — they override flat PNGs on Android 8+; flat PNGs are sufficient
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
           for density in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
             dir="${density%%:*}"; size="${density##*:}"
             mkdir -p android/app/src/main/res/mipmap-$dir
