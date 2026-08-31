@@ -1,11 +1,13 @@
 // Service Worker — caches all game files so the app works offline
-const CACHE_NAME = "flybirdy-v3";
+const CACHE_NAME = "flybirdy-v4";
 const ASSETS = [
     "./",
     "./index.html",
     "./style.css",
     "./script.js",
-    "./manifest.json"
+    "./manifest.json",
+    "./icon-192.png",
+    "./icon-512.png"
 ];
 
 // On install: pre-cache all game assets

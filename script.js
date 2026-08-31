@@ -70,7 +70,7 @@ function scheduleLoop(t){
   if(!musicPlaying)return;
   MELODY.forEach((f,i)=>{
     const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-    o.connect(g);g.connect(masterMusicGain);o.frequency.value=f;
+    o.connect(g);g.connect(masterMusicGain);o.type='triangle';o.frequency.value=f;
     g.gain.setValueAtTime(0.14,t+i*0.22);
     g.gain.exponentialRampToValueAtTime(0.001,t+i*0.22+0.2);
     o.start(t+i*0.22);o.stop(t+i*0.22+0.22);
@@ -237,7 +237,7 @@ function spawnConfetti(){
     confetti.push({
       x:Math.random()*RW, y:Math.random()*RH*0.4,
       vx:(Math.random()-0.5)*6, vy:1+Math.random()*4,
-      life:120+Math.random()*60, maxLife:180,
+      life:120+Math.random()*60,
       r:3+Math.random()*4, color:CONFETTI_COLS[Math.floor(Math.random()*CONFETTI_COLS.length)],
       rot:Math.random()*Math.PI*2, rotV:(Math.random()-0.5)*0.2
     });
@@ -411,7 +411,7 @@ const ACHV=[
   {id:'parrot_shield',icon:'🛡️', name:'Untouchable',     desc:'Let parrot auto-shield trigger 5 times'},
   {id:'flamingo_glide',icon:'🪶',name:'Graceful',        desc:'Glide for 3 seconds total'},
   {id:'milestone_10', icon:'🔥', name:'On Fire',         desc:'Hit 10-pipe milestone in Unlimited'},
-  {id:'all_mods',     icon:'🎲', name:'Chaos Master',    desc:'Experience all 7 endless modifiers'},
+  {id:'all_mods',     icon:'🎲', name:'Chaos Master',    desc:'Experience all 14 endless modifiers'},
   {id:'ghost_beat',   icon:'👻', name:'Ghost Buster',    desc:'Beat your own ghost replay'},
   {id:'zen_20',       icon:'☮️', name:'Zen Master',      desc:'Score 20 in Zen mode'},
   {id:'mirror_10',    icon:'🪞', name:'Mirror Mirror',   desc:'Score 10 in Mirror mode'},
@@ -444,7 +444,7 @@ function checkAchievements(){
   if(achvStats.eagleChargeCount>=10) unlockAchv('eagle_charge');
   if(achvStats.parrotShieldCount>=5) unlockAchv('parrot_shield');
   if(achvStats.flamingoGlideFrames>=180) unlockAchv('flamingo_glide');
-  if(achvStats.modsSeen.size>=7) unlockAchv('all_mods');
+  if(achvStats.modsSeen.size>=14) unlockAchv('all_mods');
   if(achvStats.ghostBeaten) unlockAchv('ghost_beat');
 }
 
@@ -933,7 +933,7 @@ function takeDamage(){
   gs.hp--;gs.invincible=100;
   gs.comboStreak=0;
   triggerShake(9,14);
-  try{save.settings.vibrate&&navigator.vibrate&&navigator.vibrate(80);}catch(_){} // always medium on hit
+  vibrate(80); // uses hapticStrength multiplier
   if(gs.hp===1) SFX.lowHealth();
   else SFX.hit();
   spawnParticles(BX,gs.birdY,'#FF2244',8);
