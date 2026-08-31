@@ -206,7 +206,7 @@ function drawNameEntry(){
   ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,W,H);
   roundRect(40,185,320,175,14,'#1a1a2e','#FFD700',2);
   ctx.fillStyle='#FFD700';ctx.font='bold 22px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText('?? New Top 5!',W/2,218);
+  ctx.fillText('★ New Top 5!',W/2,218);
   ctx.fillStyle='#ddd';ctx.font='15px Arial';ctx.fillText('Enter your name:',W/2,248);
   roundRect(60,262,280,42,8,'#2a2a4a','#FFD700');
   const display=(nameEntry.text||'').toUpperCase().substring(0,12);
@@ -444,7 +444,7 @@ function drawPowerups(){
     }
     roundRect(-18,-18,36,36,8,PU_COLOR[p.type],'rgba(255,255,255,0.5)');
     ctx.fillStyle='#fff';ctx.font='bold 20px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
-    const icons={heart:'?',shield:'?',magnet:'?'};
+    const icons={heart:'♥',shield:'S',magnet:'M'};
     ctx.fillText(icons[p.type]||'?',0,1);
     ctx.restore();
   }
@@ -723,7 +723,7 @@ function drawWelcome(){
   ctx.fillStyle='rgba(255,215,0,0.75)';ctx.font='bold 16px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Welcome to',W/2,122);
   ctx.fillStyle='#FFD700';ctx.font="bold 48px Arial";ctx.fillText("'Fly Birdy'",W/2,174);
   drawBirdAt(W/2,278,save.selectedBird,true);
-  btn(60,328,280,54,'  PLAY',  '#2ECC71',()=>{screen=S.MODE_SELECT;},20);
+  btn(60,328,280,54,'PLAY','#2ECC71',()=>{screen=S.MODE_SELECT;},20);
   btn(50,400,135,46,'Scores','#E67E22',()=>{screen=S.HIGH_SCORES;},13);
   btn(215,400,135,46,'Settings','#3498DB',()=>{screen=S.SETTINGS;},13);
   btn(50,460,135,46,'Birds','#9B59B6',()=>{screen=S.BIRD_SELECT;},13);
@@ -734,15 +734,15 @@ function drawWelcome(){
 // --- SCREEN: MODE SELECT -------------------------------------------------------
 function drawModeSelect(){
   drawBg('day');
-  btn(6,6,70,26,'? Back','#444',()=>{screen=S.WELCOME;},12);
+  btn(6,6,70,26,'< Back','#444',()=>{screen=S.WELCOME;},12);
   ctx.fillStyle='#FFD700';ctx.font='bold 32px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Select Mode',W/2,70);
   roundRect(22,105,356,180,18,'rgba(0,60,20,0.85)','rgba(50,200,100,0.4)');
   ctx.fillStyle='#7CFC00';ctx.font='bold 26px Arial';ctx.fillText('Adventure',W/2,148);
-  ctx.fillStyle='#c8ffc8';ctx.font='14px Arial';ctx.fillText('10 levels  �  enemies  �  boss fights',W/2,178);ctx.fillText('unlock levels  �  earn coins',W/2,198);
+  ctx.fillStyle='#c8ffc8';ctx.font='14px Arial';ctx.fillText('10 levels  \u2022  enemies  \u2022  boss fights',W/2,178);ctx.fillText('unlock levels  \u2022  earn coins',W/2,198);
   btn(110,218,180,46,'PLAY ADVENTURE','#27AE60',()=>{screen=S.LEVEL_SELECT;},14);
   roundRect(22,308,356,178,18,'rgba(60,0,90,0.85)','rgba(180,80,255,0.35)');
   ctx.fillStyle='#DA70D6';ctx.font='bold 26px Arial';ctx.fillText('Unlimited',W/2,350);
-  ctx.fillStyle='#e8c0ff';ctx.font='14px Arial';ctx.fillText('Endless  �  speed ramps forever',W/2,380);ctx.fillText('coins  �  powerups  �  high score',W/2,400);
+  ctx.fillStyle='#e8c0ff';ctx.font='14px Arial';ctx.fillText('Endless  \u2022  speed ramps forever',W/2,380);ctx.fillText('coins  \u2022  powerups  \u2022  high score',W/2,400);
   btn(110,420,180,46,'PLAY UNLIMITED','#8E44AD',()=>{initGameState(1,'unlimited');screen=S.GAME;startMusic();},14);
 }
 
@@ -752,7 +752,7 @@ const LVL_CLRS=['#27AE60','#27AE60','#27AE60','#D4821C','#D4821C','#D4821C','#7D
 const LVL_ICONS=['s','s','s','n','n','n','m','m','m','S'];
 function drawLevelSelect(){
   drawBg('day');
-  btn(6,6,70,26,'? Back','#444',()=>{screen=S.MODE_SELECT;},12);
+  btn(6,6,70,26,'< Back','#444',()=>{screen=S.MODE_SELECT;},12);
   ctx.fillStyle='#FFD700';ctx.font='bold 28px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Select Level',W/2,42);
   const cols=5,bw=62,bh=62,gx=10,gy=16,startX=(W-cols*bw-(cols-1)*gx)/2;
   for(let i=0;i<10;i++){
@@ -774,7 +774,7 @@ function drawLevelSelect(){
 // --- SCREEN: BIRD SELECT / SHOP ------------------------------------------------
 function drawBirdSelect(){
   drawBg('day');
-  btn(6,6,70,26,'? Back','#444',()=>{screen=S.WELCOME;},12);
+  btn(6,6,70,26,'< Back','#444',()=>{screen=S.WELCOME;},12);
   // Header
   ctx.fillStyle='#FFD700';ctx.font='bold 22px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillText('Shop',W/2,24);
@@ -793,7 +793,7 @@ function drawBirdSelect(){
         selected?'#00FF88':(unlocked?'#666':'#444'));
       drawBirdAt(58,y+38,key);
       ctx.fillStyle=unlocked?'#fff':'#777';ctx.font='bold 15px Arial';ctx.textAlign='left';ctx.textBaseline='top';
-      ctx.fillText(bird.name+(selected?' ?':''),98,y+7);
+      ctx.fillText(bird.name+(selected?' \u2714':''),98,y+7);
       ctx.fillStyle='#aaa';ctx.font='11px Arial';
       ctx.fillText((bird.skillType==='active'?'Active':'Passive')+': '+bird.skillDesc,98,y+27);
       if(!unlocked){
@@ -826,7 +826,7 @@ function drawBirdSelect(){
       drawBirdAt(x+40,y+42,birdKey,true,skin);
       ctx.fillStyle=active?'#00FF88':(owned?'#fff':'#aaa');
       ctx.font='bold 13px Arial';ctx.textAlign='left';ctx.textBaseline='top';
-      ctx.fillText(skin.name+(active?' ?':''),x+72,y+10);
+      ctx.fillText(skin.name+(active?' \u2714':''),x+72,y+10);
       if(skin.cost===0){
         ctx.fillStyle='#aaa';ctx.font='11px Arial';ctx.fillText('Default',x+72,y+30);
       }else if(!owned){
@@ -851,7 +851,7 @@ function drawBirdSelect(){
 // --- SCREEN: HIGH SCORES -------------------------------------------------------
 function drawHighScores(){
   drawBg('night');
-  btn(6,6,70,26,'? Back','#555',()=>{screen=S.WELCOME;},12);
+  btn(6,6,70,26,'< Back','#555',()=>{screen=S.WELCOME;},12);
   ctx.fillStyle='#FFD700';ctx.font='bold 30px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('High Scores',W/2,48);
   roundRect(26,72,348,260,14,'rgba(0,0,0,0.65)','rgba(255,215,0,0.28)');
   save.highScores.slice(0,5).forEach((hs,i)=>{
@@ -867,7 +867,7 @@ function drawHighScores(){
 // --- SCREEN: SETTINGS ------------------------------------------------------------
 function drawSettings(){
   drawBg('day');
-  btn(6,6,70,26,'? Back','#444',()=>{screen=S.WELCOME;},12);
+  btn(6,6,70,26,'< Back','#444',()=>{screen=S.WELCOME;},12);
   ctx.fillStyle='#FFD700';ctx.font='bold 30px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Settings',W/2,50);
   function toggleRow(label,val,y,action){
     roundRect(28,y,344,52,10,'rgba(0,0,0,0.35)','#555');
@@ -949,7 +949,7 @@ function drawGame(){
   if(save.settings.graphics!=='low') updateDrawParticles();
   drawHUD();
   if(gs.started&&!gs.over&&!gs.won){
-    btn(RW-40,RH-44,34,32,'?','#222',()=>{screen=S.PAUSED;stopMusic();},18);
+    btn(RW-40,RH-44,34,32,'||','#222',()=>{screen=S.PAUSED;stopMusic();},14);
   }
   if(!gs.started){
     ctx.fillStyle='rgba(0,0,0,0.48)';ctx.fillRect(0,0,RW,RH);
@@ -1032,22 +1032,28 @@ document.addEventListener('backbutton',e=>{ e.preventDefault(); handleAndroidBac
 // Clears canvas, resets btns[], dispatches to current screen's draw (+ update for GAME)
 function loop(){
   ctx.clearRect(0,0,RW,RH);btns=[];
+  // Uniform scale keeps 400×600 aspect ratio; centres UI in any window size
+  const uiS=Math.min(RW/W,RH/H);
+  const uiOX=(RW-W*uiS)/2, uiOY=(RH-H*uiS)/2;
+  function uiCtx(fn){ctx.save();ctx.translate(uiOX,uiOY);ctx.scale(uiS,uiS);fn();ctx.restore();}
+  // Fill letterbox area with background colour
+  if(uiOX>0||uiOY>0){ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,RW,RH);}
   switch(screen){
-    case S.LOADING:      ctx.save();ctx.scale(RW/W,RH/H);drawLoading();ctx.restore();break;
-    case S.WELCOME:      ctx.save();ctx.scale(RW/W,RH/H);drawWelcome();ctx.restore();break;
-    case S.MODE_SELECT:  ctx.save();ctx.scale(RW/W,RH/H);drawModeSelect();ctx.restore();break;
-    case S.LEVEL_SELECT: ctx.save();ctx.scale(RW/W,RH/H);drawLevelSelect();ctx.restore();break;
-    case S.BIRD_SELECT:  ctx.save();ctx.scale(RW/W,RH/H);drawBirdSelect();ctx.restore();break;
-    case S.HIGH_SCORES:  ctx.save();ctx.scale(RW/W,RH/H);drawHighScores();ctx.restore();break;
-    case S.SETTINGS:     ctx.save();ctx.scale(RW/W,RH/H);drawSettings();ctx.restore();break;
+    case S.LOADING:      uiCtx(drawLoading);break;
+    case S.WELCOME:      uiCtx(drawWelcome);break;
+    case S.MODE_SELECT:  uiCtx(drawModeSelect);break;
+    case S.LEVEL_SELECT: uiCtx(drawLevelSelect);break;
+    case S.BIRD_SELECT:  uiCtx(drawBirdSelect);break;
+    case S.HIGH_SCORES:  uiCtx(drawHighScores);break;
+    case S.SETTINGS:     uiCtx(drawSettings);break;
     case S.PAUSED:       drawPaused();break;
     case S.GAME:
       updateGame();drawGame();
-      if(gs.over){ctx.save();ctx.scale(RW/W,RH/H);drawGameOver();ctx.restore();}
-      if(gs.won){ctx.save();ctx.scale(RW/W,RH/H);drawLevelWon();ctx.restore();}
+      if(gs.over){uiCtx(drawGameOver);}
+      if(gs.won){uiCtx(drawLevelWon);}
       break;
   }
-  ctx.save();ctx.scale(RW/W,RH/H);drawPopup();drawNameEntry();ctx.restore();
+  uiCtx(()=>{drawPopup();drawNameEntry();});
   requestAnimationFrame(loop);
 }
 loop();
