@@ -249,7 +249,7 @@ function roundRect(x,y,w,h,r,fill,stroke,lineW=2){
 // Draws a button and registers its hit-test region; disabled=true greys it out and blocks taps
 function btn(x,y,w,h,label,color,action,fontSize=15,disabled=false){
   btns.push({x,y,w,h,action:disabled?null:action});
-  roundRect(x,y,w,h,8,disabled?'#555':color,disabled?'#666':'rgba(255,255,255,0.35)');
+  roundRect(x,y,w,h,8,disabled?'#555':color,disabled?'#666':'rgba(255,255,255,0.65)');
   ctx.fillStyle=disabled?'#888':'#fff';
   ctx.font=`bold ${fontSize}px Arial`;
   ctx.textAlign='center';ctx.textBaseline='middle';
@@ -678,13 +678,14 @@ function drawWelcome(){
   btn(50,400,135,46,'Scores','#E67E22',()=>{screen=S.HIGH_SCORES;},13);
   btn(215,400,135,46,'Settings','#3498DB',()=>{screen=S.SETTINGS;},13);
   btn(50,460,135,46,'Birds','#9B59B6',()=>{screen=S.BIRD_SELECT;},13);
-  roundRect(215,460,135,46,8,'rgba(243,156,18,0.25)','#F39C12');
+  roundRect(215,460,135,46,8,'#B06000','#F39C12');
   ctx.fillStyle='#FFD700';ctx.font='bold 16px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Coins: '+save.coins,215+135/2,460+23);
 }
 
 // ─── SCREEN: MODE SELECT ───────────────────────────────────────────────────────
 function drawModeSelect(){
   drawBg('day');
+  btn(6,6,70,26,'← Back','#444',()=>{screen=S.WELCOME;},12);
   ctx.fillStyle='#FFD700';ctx.font='bold 32px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Select Mode',W/2,70);
   roundRect(22,105,356,180,18,'rgba(0,60,20,0.85)','rgba(50,200,100,0.4)');
   ctx.fillStyle='#7CFC00';ctx.font='bold 26px Arial';ctx.fillText('Adventure',W/2,148);
@@ -702,6 +703,7 @@ const LVL_CLRS=['#27AE60','#27AE60','#27AE60','#D4821C','#D4821C','#D4821C','#7D
 const LVL_ICONS=['s','s','s','n','n','n','m','m','m','S'];
 function drawLevelSelect(){
   drawBg('day');
+  btn(6,6,70,26,'← Back','#444',()=>{screen=S.MODE_SELECT;},12);
   ctx.fillStyle='#FFD700';ctx.font='bold 28px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Select Level',W/2,42);
   const cols=5,bw=62,bh=62,gx=10,gy=16,startX=(W-cols*bw-(cols-1)*gx)/2;
   for(let i=0;i<10;i++){
@@ -715,7 +717,7 @@ function drawLevelSelect(){
     ctx.fillText(unlocked?LVL_ICONS[i]:'',x+bw/2,y+bh/2+13);
   }
   ctx.fillStyle='#ddd';ctx.font='12px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Green=Easy  Orange=Med  Purple=Hard  Red=BOSS',W/2,243);
-  roundRect(22,260,356,46,10,'rgba(120,0,180,0.4)','#9B59B6');
+  roundRect(22,260,356,46,10,'#5A0090','#9B59B6');
   ctx.fillStyle='#fff';ctx.font='13px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Bird: '+BIRDS[save.selectedBird].name+' - '+BIRDS[save.selectedBird].skillDesc,W/2,283);
   btns.push({x:22,y:260,w:356,h:46,action:()=>{screen=S.BIRD_SELECT;}});
 }
@@ -723,6 +725,7 @@ function drawLevelSelect(){
 // ─── SCREEN: BIRD SELECT / SHOP ────────────────────────────────────────────────
 function drawBirdSelect(){
   drawBg('day');
+  btn(6,6,70,26,'← Back','#444',()=>{screen=S.WELCOME;},12);
   // Header
   ctx.fillStyle='#FFD700';ctx.font='bold 22px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillText('Shop',W/2,24);
@@ -799,6 +802,7 @@ function drawBirdSelect(){
 // ─── SCREEN: HIGH SCORES ───────────────────────────────────────────────────────
 function drawHighScores(){
   drawBg('night');
+  btn(6,6,70,26,'← Back','#555',()=>{screen=S.WELCOME;},12);
   ctx.fillStyle='#FFD700';ctx.font='bold 30px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('High Scores',W/2,48);
   roundRect(26,72,348,260,14,'rgba(0,0,0,0.65)','rgba(255,215,0,0.28)');
   save.highScores.slice(0,5).forEach((hs,i)=>{
@@ -814,6 +818,7 @@ function drawHighScores(){
 // ─── SCREEN: SETTINGS ────────────────────────────────────────────────────────────
 function drawSettings(){
   drawBg('day');
+  btn(6,6,70,26,'← Back','#444',()=>{screen=S.WELCOME;},12);
   ctx.fillStyle='#FFD700';ctx.font='bold 30px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Settings',W/2,50);
   function toggleRow(label,val,y,action){
     roundRect(28,y,344,52,10,'rgba(0,0,0,0.35)','#555');
