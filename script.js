@@ -560,7 +560,7 @@ function spawnEnemy(){
 }
 // Spawns the level-10 boss and enables player shooting ability
 function spawnBoss(){
-  gs.boss={x:RW+60,y:RH/2,vx:-1,vy:0,hp:30,maxHp:30,shootTimer:80,dead:false};
+  gs.boss={x:RW+60,y:RH/2,vx:-2,vy:1.2,hp:30,maxHp:30,shootTimer:80,dead:false};
   gs.canShoot=true;
 }
 // Applies a collected power-up: SFX + particles + stat change
@@ -661,8 +661,8 @@ function updateGame(){
   // boss: patrol horizontally, fires spread + aimed shots when HP < 50%
   if(gs.boss&&!gs.boss.dead){
     const b=gs.boss;
-    b.x+=b.vx;if(b.x<RW*0.55)b.vx=1.2;if(b.x>RW*0.85)b.vx=-1.8;
-    b.vy+=0.025;b.y+=b.vy;if(b.y<70)b.vy=1.2;if(b.y>RH-70)b.vy=-1.2;
+    b.x+=b.vx;if(b.x<RW*0.55){b.x=RW*0.55;b.vx= Math.abs(b.vx)||2;}if(b.x>RW*0.82){b.x=RW*0.82;b.vx=-Math.abs(b.vx)||2;}
+    b.y+=b.vy;if(b.y<RH*0.15){b.y=RH*0.15;b.vy= Math.abs(b.vy)||1.2;}if(b.y>RH*0.82){b.y=RH*0.82;b.vy=-Math.abs(b.vy)||1.2;}
     b.shootTimer--;
     if(b.shootTimer<=0){
       if(b.hp<b.maxHp/2){for(let a=0;a<Math.PI*2;a+=Math.PI/4){gs.enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3});}}
