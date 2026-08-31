@@ -113,16 +113,16 @@ function addHighScore(name,score){
 // pipeSpeed: px/frame  |  gap: bird passage height (px)  |  interval: spacing factor
 // targetScore: pipes to clear to win the adventure level
 const LEVELS=[
-  {pipeSpeed:2,  gap:200,interval:100,targetScore:5, bg:'day',   hasEnemies:false,hasBoss:false},
-  {pipeSpeed:2.5,gap:195,interval:95, targetScore:8, bg:'day',   hasEnemies:false,hasBoss:false},
-  {pipeSpeed:3,  gap:190,interval:90, targetScore:10,bg:'day',   hasEnemies:false,hasBoss:false},
-  {pipeSpeed:3.2,gap:185,interval:88, targetScore:12,bg:'sunset',hasEnemies:false,hasBoss:false},
-  {pipeSpeed:3.5,gap:178,interval:85, targetScore:15,bg:'sunset',hasEnemies:true, hasBoss:false},
-  {pipeSpeed:3.8,gap:172,interval:82, targetScore:18,bg:'sunset',hasEnemies:true, hasBoss:false},
-  {pipeSpeed:4,  gap:166,interval:80, targetScore:20,bg:'night', hasEnemies:true, hasBoss:false},
-  {pipeSpeed:4.5,gap:160,interval:78, targetScore:22,bg:'night', hasEnemies:true, hasBoss:false},
-  {pipeSpeed:5,  gap:154,interval:75, targetScore:25,bg:'night', hasEnemies:true, hasBoss:false},
-  {pipeSpeed:5,  gap:148,interval:72, targetScore:30,bg:'space', hasEnemies:true, hasBoss:true}
+  {pipeSpeed:2,  gap:200,interval:180,targetScore:5, bg:'day',   hasEnemies:false,hasBoss:false},
+  {pipeSpeed:2.5,gap:195,interval:175,targetScore:8, bg:'day',   hasEnemies:false,hasBoss:false},
+  {pipeSpeed:3,  gap:190,interval:168,targetScore:10,bg:'day',   hasEnemies:false,hasBoss:false},
+  {pipeSpeed:3.2,gap:185,interval:165,targetScore:12,bg:'sunset',hasEnemies:false,hasBoss:false},
+  {pipeSpeed:3.5,gap:178,interval:160,targetScore:15,bg:'sunset',hasEnemies:true, hasBoss:false},
+  {pipeSpeed:3.8,gap:172,interval:155,targetScore:18,bg:'sunset',hasEnemies:true, hasBoss:false},
+  {pipeSpeed:4,  gap:166,interval:152,targetScore:20,bg:'night', hasEnemies:true, hasBoss:false},
+  {pipeSpeed:4.5,gap:160,interval:150,targetScore:22,bg:'night', hasEnemies:true, hasBoss:false},
+  {pipeSpeed:5,  gap:154,interval:148,targetScore:25,bg:'night', hasEnemies:true, hasBoss:false},
+  {pipeSpeed:5,  gap:148,interval:145,targetScore:30,bg:'space', hasEnemies:true, hasBoss:true}
 ];
 
 // --- BIRD DATA ---------------------------------------------------------------
