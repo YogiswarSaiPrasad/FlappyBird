@@ -639,8 +639,8 @@ function updateGame(){
   for(const p of gs.pipes){const bL=BX-BR,bR2=BX+BR,bT=gs.birdY-BR,bBot=gs.birdY+BR,gapY=p.topH+gs.level.gap;if(bR2>p.x&&bL<p.x+50&&(bT<p.topH||bBot>gapY)){takeDamage();break;}}
   for(const e of gs.enemies){if(!e.dead&&Math.sqrt((BX-e.x)**2+(gs.birdY-e.y)**2)<BR+16) takeDamage();}
   if(gs.boss&&!gs.boss.dead&&Math.sqrt((BX-gs.boss.x)**2+(gs.birdY-gs.boss.y)**2)<BR+42) takeDamage();
-  // floor: shield cushions landing, ceiling: hard stop
-  if(gs.birdY+BR>H){if(gs.shieldTimer>0)gs.birdY=H-BR;else takeDamage();}
+  // floor: takeDamage so shield is consumed on landing; ceiling: hard stop
+  if(gs.birdY+BR>H){gs.birdY=H-BR;gs.velocity=0;takeDamage();}
   if(gs.birdY-BR<0){gs.birdY=BR;gs.velocity=0;}
 }
 
@@ -937,9 +937,8 @@ canvas.addEventListener('pointerup',e=>{
     if(back){ SFX.click(); back(); return; }
   }
 
-  // Button tap on all non-active-gameplay screens
-  const isMenuTap = absDx<20 && absDy<20 && (screen!==S.GAME || gs.over || gs.won);
-  if(isMenuTap){
+  // Always hit-test on small taps; handles pause button during active gameplay
+  if(absDx<20 && absDy<20){
     const rect=canvas.getBoundingClientRect();
     const px=(e.clientX-rect.left)*(W/rect.width),py=(e.clientY-rect.top)*(H/rect.height);
     hitBtn(px,py);
