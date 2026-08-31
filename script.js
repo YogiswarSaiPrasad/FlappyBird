@@ -249,7 +249,7 @@ function roundRect(x,y,w,h,r,fill,stroke,lineW=2){
 // Draws a button and registers its hit-test region; disabled=true greys it out and blocks taps
 function btn(x,y,w,h,label,color,action,fontSize=15,disabled=false){
   btns.push({x,y,w,h,action:disabled?null:action});
-  roundRect(x,y,w,h,8,disabled?'#555':color,disabled?'#666':'rgba(255,255,255,0.65)');
+  roundRect(x,y,w,h,8,disabled?'#555':color,disabled?'#666':'#fff');
   ctx.fillStyle=disabled?'#888':'#fff';
   ctx.font=`bold ${fontSize}px Arial`;
   ctx.textAlign='center';ctx.textBaseline='middle';
@@ -893,7 +893,7 @@ function drawGame(){
   if(save.settings.graphics!=='low') updateDrawParticles();
   drawHUD();
   if(gs.started&&!gs.over&&!gs.won){
-    btn(360,556,34,32,'⏸','rgba(0,0,0,0.55)',()=>{screen=S.PAUSED;stopMusic();},18);
+    btn(360,556,34,32,'⏸','#222',()=>{screen=S.PAUSED;stopMusic();},18);
   }
   if(!gs.started){
     ctx.fillStyle='rgba(0,0,0,0.48)';ctx.fillRect(0,0,W,H);
