@@ -46,16 +46,26 @@ jobs:
       - name: Sync web assets into Android project
         run: npx cap sync android
 
-      # 8. Make gradlew executable (it loses execute permission on Linux checkout)
+      # 8. Resize icon-512.png into all required Android mipmap densities
+      - name: Generate Android launcher icons
+        run: |
+          for density in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            dir="${density%%:*}"; size="${density##*:}"
+            mkdir -p android/app/src/main/res/mipmap-$dir
+            convert icon-512.png -resize ${size}x${size} android/app/src/main/res/mipmap-$dir/ic_launcher.png
+            cp android/app/src/main/res/mipmap-$dir/ic_launcher.png android/app/src/main/res/mipmap-$dir/ic_launcher_round.png
+          done
+
+      # 9. Make gradlew executable (it loses execute permission on Linux checkout)
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # 9. Build the debug APK using Gradle
+      # 10. Build the debug APK using Gradle
       - name: Build debug APK
         run: ./gradlew assembleDebug
         working-directory: android
 
-      # 9. Upload the APK as a downloadable artifact
+      # 11. Upload the APK as a downloadable artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
