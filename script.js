@@ -543,7 +543,7 @@ function spawnPipe(){
   gs.pipes.push(p);
   const gapMid=topH+gs.level.gap/2;
   const n=save.selectedBird==='sparrow'?6:3; // sparrow skill: exactly 2� coins
-  for(let i=0;i<n;i++){gs.coinItems.push({x:W+12+i*16,y:gapMid+(Math.random()-0.5)*(gs.level.gap*0.5),collected:false});}
+  for(let i=0;i<n;i++){gs.coinItems.push({x:RW+12+i*16,y:gapMid+(Math.random()-0.5)*(gs.level.gap*0.5),collected:false});}
   gs.puCountdown--;
   if(gs.puCountdown<=0){
     if(gs.puQueue.length===0) gs.puQueue=makePuQueue(gs.lastPuType);
@@ -640,7 +640,7 @@ function updateGame(){
   for(const p of gs.powerups){
     p.x-=gs.pipeSpeed;p.y+=p.vy;if(p.collected)continue;
     if(p.y<=20){p.y=20;p.vy=Math.abs(p.vy);}
-    if(p.y>=H-20){p.y=H-20;p.vy=-Math.abs(p.vy);}
+    if(p.y>=RH-20){p.y=RH-20;p.vy=-Math.abs(p.vy);}
     const dx=p.x-BX,dy=p.y-gs.birdY;
     if(Math.sqrt(dx*dx+dy*dy)<BR+20){p.collected=true;applyPowerup(p.type);}
   }
@@ -677,7 +677,7 @@ function updateGame(){
     for(const e of gs.enemies){if(!e.dead&&Math.abs(b.x-e.x)<18&&Math.abs(b.y-e.y)<18){e.hp--;b.hit=true;spawnParticles(e.x,e.y,'#FF6600',6);SFX.hit();if(e.hp<=0){e.dead=true;spawnParticles(e.x,e.y,'#FF4400',12);}}}
     if(gs.boss&&!gs.boss.dead&&Math.abs(b.x-gs.boss.x)<46&&Math.abs(b.y-gs.boss.y)<46){gs.boss.hp--;b.hit=true;spawnParticles(gs.boss.x,gs.boss.y,'#FF6600',5);SFX.hit();if(gs.boss.hp<=0){gs.boss.dead=true;gs.canShoot=false;spawnParticles(gs.boss.x,gs.boss.y,'#FF4400',25);gs.score+=10;}}
   }
-  gs.bullets=gs.bullets.filter(b=>!b.hit&&b.x<W+20);
+  gs.bullets=gs.bullets.filter(b=>!b.hit&&b.x<RW+20);
   // enemy bullets: let takeDamage() handle shield/invincibility so shield is consumed correctly
   for(const b of gs.enemyBullets){
     b.x+=b.vx;b.y+=b.vy;
