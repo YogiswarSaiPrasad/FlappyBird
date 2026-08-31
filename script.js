@@ -86,9 +86,136 @@ function stopMusic(){
   releaseWakeLock();
 }
 
-// --- SAVE / LOAD -------------------------------------------------------------
-// Fields merged individually so new fields always fall back to defaults in `save`.
-const SAVE_KEY='flybirdy_v1';
+  musicPlaying=false;
+  bgNodes.forEach(n=>{try{n.stop();}catch(_){}});
+  bgNodes=[];
+  stopCustomMusic();
+  releaseWakeLock();
+}
+
+// --- CUSTOM AUDIO SYSTEM -----------------------------------------------------
+const AUDIO_DB='flybirdy_audio_v1';
+let _adb=null;
+let customMusicBuffer=null, customMusicSource=null;
+const customSFXBuffers={};  // sfxName -> AudioBuffer
+let trimState=null;         // non-null while Audio screen trim UI is active
+
+function _openADB(cb){
+  if(_adb){cb(_adb);return;}
+  const r=indexedDB.open(AUDIO_DB,1);
+  r.onupgradeneeded=e=>e.target.result.createObjectStore('clips');
+  r.onsuccess=e=>{_adb=e.target.result;cb(_adb);};
+  r.onerror=()=>cb(null);
+}
+function _saveClip(key,blob){ _openADB(db=>{if(!db)return; db.transaction('clips','readwrite').objectStore('clips').put(blob,key);}); }
+function _loadClip(key,cb){ _openADB(db=>{ if(!db){cb(null);return;} const r=db.transaction('clips','readonly').objectStore('clips').get(key); r.onsuccess=e=>cb(e.target.result||null); r.onerror=()=>cb(null); }); }
+function _deleteClip(key){ _openADB(db=>{if(!db)return; db.transaction('clips','readwrite').objectStore('clips').delete(key);}); }
+function _blobToBuffer(blob,cb){ blob.arrayBuffer().then(ab=>audioCtx.decodeAudioData(ab).then(cb).catch(()=>cb(null))).catch(()=>cb(null)); }
+
+function startCustomMusic(){
+  if(!customMusicBuffer||!musicPlaying)return;
+  resumeAudio();
+  customMusicSource=audioCtx.createBufferSource();
+  customMusicSource.buffer=customMusicBuffer;
+  customMusicSource.loop=true;
+  customMusicSource.connect(masterMusicGain);
+  customMusicSource.start();
+}
+function stopCustomMusic(){
+  if(customMusicSource){try{customMusicSource.stop();}catch(_){}customMusicSource=null;}
+}
+function playCustomOnce(sfxName){
+  const buf=customSFXBuffers[sfxName];
+  if(!buf||!soundEnabled)return false;
+  resumeAudio();
+  const src=audioCtx.createBufferSource(), g=audioCtx.createGain();
+  src.buffer=buf; src.connect(g); g.connect(masterSFXGain); src.start();
+  return true;
+}
+function loadCustomAudio(){
+  const SFX_KEYS=['flap','score','die','hit','levelWin','highScore','lowHealth'];
+  SFX_KEYS.forEach(k=>_loadClip('sfx_'+k,blob=>{if(blob)_blobToBuffer(blob,buf=>{if(buf)customSFXBuffers[k]=buf;});}));
+  _loadClip('music',blob=>{ if(blob) _blobToBuffer(blob,buf=>{ if(buf){ customMusicBuffer=buf; if(musicPlaying){stopMusic();startMusic();} } }); });
+}
+
+// Trim pointer stubs — overwritten by trimState when Audio screen is active
+function trimPointerDown(x,y){
+  if(!trimState)return false;
+  const{tx,tw,th,ty}=trimState;
+  if(y<ty||y>ty+th)return false;
+  const frac=Math.max(0,Math.min(1,(x-tx)/tw));
+  if(Math.abs(x-(tx+trimState.start*tw))<12){trimState.dragging='start';return true;}
+  if(Math.abs(x-(tx+trimState.end*tw))<12){trimState.dragging='end';return true;}
+  return false;
+}
+function trimPointerMove(x){
+  if(!trimState||!trimState.dragging)return;
+  const frac=Math.max(0,Math.min(1,(x-trimState.tx)/trimState.tw));
+  if(trimState.dragging==='start') trimState.start=Math.min(frac,trimState.end-0.01);
+  else trimState.end=Math.max(frac,trimState.start+0.01);
+}
+function trimPointerUp(){ if(trimState) trimState.dragging=null; }
+
+// --- SCREEN: CUSTOM AUDIO ----------------------------------------------------
+const AUDIO_SFX_KEYS=['flap','score','die','hit','levelWin','highScore','lowHealth'];
+const AUDIO_SFX_LABELS={flap:'Flap',score:'Score',die:'Die',hit:'Hit',levelWin:'Level Win',highScore:'High Score',lowHealth:'Low HP'};
+let audioTab='music'; // 'music' | 'sfx'
+let audioSfxSel='flap';
+function drawAudio(){
+  drawBg('night');
+  btn(6,6,70,26,'< Back','#555',()=>{screen=S.SETTINGS;trimState=null;},12);
+  ctx.fillStyle='#FFD700';ctx.font='bold 22px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Custom Audio',W/2,42);
+  // tabs
+  btn(30,60,150,32,audioTab==='music'?'♪ Music (active)':'♪ Music',audioTab==='music'?'#8E44AD':'#444',()=>{audioTab='music';trimState=null;},12);
+  btn(220,60,150,32,audioTab==='sfx'?'★ SFX (active)':'★ SFX',audioTab==='sfx'?'#E67E22':'#444',()=>{audioTab='sfx';trimState=null;},12);
+
+  if(audioTab==='music'){
+    ctx.fillStyle='#ddd';ctx.font='13px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(customMusicBuffer?'Custom music loaded':'No custom music — using built-in melody',W/2,130);
+    btn(60,155,280,40,'Upload Music File','#2C3E50',()=>{
+      const inp=document.createElement('input');inp.type='file';inp.accept='audio/*';
+      inp.onchange=e=>{const f=e.target.files[0];if(!f)return;
+        _saveClip('music',f);_blobToBuffer(f,buf=>{if(buf){customMusicBuffer=buf;showPopup('Music loaded!');}else showPopup('Could not decode file');});
+      };inp.click();
+    },13);
+    if(customMusicBuffer){
+      btn(60,210,280,40,'Remove Custom Music','#922B21',()=>{_deleteClip('music');customMusicBuffer=null;if(musicPlaying){stopMusic();startMusic();}showPopup('Music removed');},13);
+      // trim bar
+      if(!trimState) trimState={tx:40,tw:320,th:24,ty:275,start:0,end:1,dragging:null};
+      roundRect(40,270,320,34,6,'rgba(255,255,255,0.08)','#8E44AD');
+      const {tx,tw,th,ty,start,end}=trimState;
+      ctx.fillStyle='#8E44AD';ctx.fillRect(tx+start*tw,ty,Math.max(2,(end-start)*tw),th);
+      ctx.fillStyle='#FFD700';ctx.fillRect(tx+start*tw-4,ty-2,8,th+4);
+      ctx.fillStyle='#FFD700';ctx.fillRect(tx+end*tw-4,ty-2,8,th+4);
+      ctx.fillStyle='#aaa';ctx.font='11px Arial';ctx.textAlign='left';ctx.fillText('Trim: '+Math.round(start*100)+'%–'+Math.round(end*100)+'%',40,320);
+    }
+  }else{
+    // SFX selector
+    const kx=28,ky=100,kw=80,kh=30,kg=6;
+    AUDIO_SFX_KEYS.forEach((k,i)=>{
+      const col=i%4,row=Math.floor(i/4);
+      const bx=kx+col*(kw+kg),by=ky+row*(kh+6);
+      const active=audioSfxSel===k;
+      roundRect(bx,by,kw,kh,6,active?'#E67E22':'rgba(0,0,0,0.4)',active?'#F39C12':'#555');
+      ctx.fillStyle=active?'#fff':'#aaa';ctx.font='bold 11px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(AUDIO_SFX_LABELS[k],bx+kw/2,by+kh/2);
+      pushBtn(bx,by,kw,kh,()=>{audioSfxSel=k;trimState=null;SFX.click();});
+    });
+    const sel=audioSfxSel;
+    const hasBuf=!!customSFXBuffers[sel];
+    ctx.fillStyle='#ddd';ctx.font='13px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(hasBuf?'Custom SFX loaded for '+AUDIO_SFX_LABELS[sel]:'No custom SFX — using built-in',W/2,220);
+    btn(60,245,280,40,'Upload SFX File','#2C3E50',()=>{
+      const inp=document.createElement('input');inp.type='file';inp.accept='audio/*';
+      inp.onchange=e=>{const f=e.target.files[0];if(!f)return;
+        _saveClip('sfx_'+sel,f);_blobToBuffer(f,buf=>{if(buf){customSFXBuffers[sel]=buf;showPopup(AUDIO_SFX_LABELS[sel]+' SFX loaded!');}else showPopup('Could not decode file');});
+      };inp.click();
+    },13);
+    if(hasBuf) btn(60,298,280,40,'Remove This SFX','#922B21',()=>{_deleteClip('sfx_'+sel);delete customSFXBuffers[sel];showPopup('SFX removed');},13);
+  }
+}
+
+
 let save={
   unlockedLevels:1,coins:0,
   highScores:[{name:'SWIFT',score:500},{name:'BLAZE',score:400},{name:'NOVA',score:300},{name:'REX',score:200},{name:'ACE',score:100}],
