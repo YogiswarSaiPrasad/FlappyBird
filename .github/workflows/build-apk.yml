@@ -35,7 +35,7 @@ jobs:
       - name: Prepare web assets in www/
         run: |
           mkdir -p www
-          cp index.html style.css script.js manifest.json sw.js www/
+          cp index.html style.css script.js manifest.json sw.js icon-192.png icon-512.png www/
 
       - name: Sync web assets into Android project
         run: npx cap sync android

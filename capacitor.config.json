@@ -1,7 +1,7 @@
 {
   "appId": "com.saintswar.flybirdy",
   "appName": "Fly Birdy",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   },
