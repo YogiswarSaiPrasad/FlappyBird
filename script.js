@@ -661,7 +661,7 @@ function updateGame(){
   // boss: patrol horizontally, fires spread + aimed shots when HP < 50%
   if(gs.boss&&!gs.boss.dead){
     const b=gs.boss;
-    b.x+=b.vx;if(b.x<RW-90)b.vx=0.6;if(b.x>RW-20)b.vx=-1.2;
+    b.x+=b.vx;if(b.x<RW*0.55)b.vx=1.2;if(b.x>RW*0.85)b.vx=-1.8;
     b.vy+=0.025;b.y+=b.vy;if(b.y<70)b.vy=1.2;if(b.y>RH-70)b.vy=-1.2;
     b.shootTimer--;
     if(b.shootTimer<=0){
