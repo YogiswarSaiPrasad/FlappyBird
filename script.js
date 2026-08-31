@@ -1173,7 +1173,7 @@ function drawLoading(){
     // loading bar
     const prog=Math.min(1,loadTimer/dur);
     roundRect(W/2-100,H/2+70,200,12,6,'rgba(255,255,255,0.12)');
-    ctx.fillStyle='#FFD700';ctx.beginPath();ctx.roundRect(W/2-100,H/2+70,Math.round(200*prog),12,6);ctx.fill();
+    if(prog>0) roundRect(W/2-100,H/2+70,Math.max(1,Math.round(200*prog)),12,6,'#FFD700');
   }
   ctx.globalAlpha=1;
   if(loadTimer>=dur){loadTimer=0;loadPhase++;if(loadPhase>=2){loadSave();loadCustomAudio();refreshDailyChallenges();applyVolume();screen=S.WELCOME;}}
