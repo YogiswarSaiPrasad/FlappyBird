@@ -86,13 +86,6 @@ function stopMusic(){
   releaseWakeLock();
 }
 
-  musicPlaying=false;
-  bgNodes.forEach(n=>{try{n.stop();}catch(_){}});
-  bgNodes=[];
-  stopCustomMusic();
-  releaseWakeLock();
-}
-
 // --- CUSTOM AUDIO SYSTEM -----------------------------------------------------
 const AUDIO_DB='flybirdy_audio_v1';
 let _adb=null;
