@@ -1873,14 +1873,18 @@ const BACK_SCREEN = {
 
 let swipeStartX=0, swipeStartY=0, swipeStartTime=0;
 let lastTapPx=0, lastTapPy=0; // real canvas px of last resolved tap
+let scrollDragActive=false;   // true while finger is dragging a scrollable screen
+
+const SCROLLABLE_SCREENS=new Set([S.SETTINGS,S.HIGH_SCORES,S.BIRD_SELECT,S.UNLIMITED_OPTS]);
 
 canvas.addEventListener('pointerdown',e=>{
   e.preventDefault();resumeAudio();
   swipeStartX=e.clientX; swipeStartY=e.clientY; swipeStartTime=Date.now();
+  scrollDragActive=SCROLLABLE_SCREENS.has(screen);
   if(screen===S.AUDIO&&trimState){
     const uiS=Math.min(RW/W,RH/H),uiOX=(RW-W*uiS)/2,uiOY=(RH-H*uiS)/2;
     const lx=(e.clientX-uiOX)/uiS, ly=(e.clientY-uiOY)/uiS;
-    if(trimPointerDown(lx,ly)) return;
+    if(trimPointerDown(lx,ly)){scrollDragActive=false;return;}
   }
   // Flap fires immediately on pointerdown for tight game feel
   if(screen===S.GAME&&!gs.over&&!gs.won) playerFlap();
@@ -1895,6 +1899,19 @@ canvas.addEventListener('pointermove',e=>{
     const uiS=Math.min(RW/W,RH/H),uiOX=(RW-W*uiS)/2;
     trimPointerMove((e.clientX-uiOX)/uiS);
   }
+  // Live drag-scroll on scrollable screens
+  if(scrollDragActive&&SCROLLABLE_SCREENS.has(screen)){
+    const dy=e.clientY-swipeStartY;
+    if(Math.abs(dy)>4){
+      const uiS=Math.min(RW/W,RH/H);
+      const delta=Math.round(-dy/uiS);
+      if(screen===S.SETTINGS){
+        const maxScroll=Math.max(0,912-H);
+        settingsScroll=Math.max(0,Math.min(maxScroll,settingsScroll+delta));
+      }
+      swipeStartY=e.clientY; // incremental — update base each move
+    }
+  }
 });
 
 canvas.addEventListener('pointerup',e=>{ trimPointerUp(); },{ passive:true });
@@ -1905,11 +1922,16 @@ canvas.addEventListener('pointerup',e=>{
   const dt=Date.now()-swipeStartTime;
   const absDx=Math.abs(dx), absDy=Math.abs(dy);
 
-  // Swipe right on menu screens: go back
-  if(dt<400 && absDx>60 && absDx>absDy*1.5 && dx>0 && screen!==S.GAME){
+  // Swipe right on menu screens: go back (not when dragging to scroll)
+  if(dt<400 && absDx>60 && absDx>absDy*1.5 && dx>0 && screen!==S.GAME && !scrollDragActive){
     const back=BACK_SCREEN[screen];
-    if(back){ SFX.click(); back(); return; }
+    if(back){ SFX.click(); back(); scrollDragActive=false; return; }
   }
+  // Vertical swipe on settings = scroll (not a tap)
+  if(screen===S.SETTINGS && absDy>12){
+    scrollDragActive=false; return;
+  }
+  scrollDragActive=false;
 
   // Always hit-test on small taps; handles pause button during active gameplay
   if(absDx<20 && absDy<20){
