@@ -1,0 +1,709 @@
+================================================================================
+FLY BIRDY — NESTED EXECUTION TRACE (code A -> calls code B -> calls code C ...)
+================================================================================
+Format used below for every trace:
+
+[filename] CODE A — what it is (function/button/screen/handler)
+<code for A>
+    |
+    v  (A's output is fed into / A calls...)
+    [filename] CODE B — what it is  (this call happens INSIDE code A)
+    <code for B, indented one level>
+        |
+        v
+        [filename] CODE C — what it is (this call happens INSIDE code B)
+        <code for C, indented two levels>
+        => DISPLAYS/DOES: one-line result of C
+    => DISPLAYS/DOES: one-line result of B (after C returns/runs)
+=> DISPLAYS/DOES: one-line result of A (after B returns/runs)
+
+Read top-to-bottom, indentation = call depth (nesting), exactly like the
+example you gave (code A -> code B is called inside A -> rest of A -> result).
+Order below = the order screens actually load for a player.
+
+================================================================================
+TRACE 1 — APP BOOT
+================================================================================
+
+[index.html] CODE A — <canvas id="game"> element (markup, not a function)
+<canvas id="game" width="400" height="600"></canvas>
+<input id="nameInput" type="text" ...>
+    |
+    v  (the canvas + input elements are the INPUT that script.js reads by id)
+    [script.js] CODE B — top-level const declarations (runs immediately on file load)
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const W = 400, H = 600;
+    let RW = window.innerWidth, RH = window.innerHeight;
+    canvas.width = RW; canvas.height = RH;
+        |
+        v  (registers a listener that will fire later, on any resize event)
+        [script.js] CODE C — resize handler (inside code B's setup, runs on 'resize' event)
+        window.addEventListener('resize', () => {
+          RW=window.innerWidth; RH=window.innerHeight;
+          canvas.width=RW; canvas.height=RH;
+          BX=Math.round(RW*0.2);
+          generateGameStars();
+        });
+        => DOES: keeps canvas.width/height and bird X position in sync whenever
+                 the device is rotated or the window is resized
+    => DOES: gives every later draw call a 2D context (ctx) sized to the real screen
+=> DISPLAYS: nothing yet — canvas is blank; this only wires up the drawing surface
+
+    |
+    v  (index.html's second script tag runs right after script.js finishes loading)
+    [index.html] CODE D — service worker registration (inline <script>)
+    if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js");
+    }
+        |
+        v  (the string "./sw.js" is the INPUT — browser fetches and runs that file)
+        [sw.js] CODE E — install event handler (fires once, first visit only)
+        self.addEventListener("install", event => {
+            event.waitUntil(
+                caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+            );
+            self.skipWaiting();
+        });
+        => DOES: downloads and stores index.html/style.css/script.js/manifest.json/
+                 icons into the "flybirdy-v4" cache for offline use
+=> DOES: from now on, every network request the page makes is intercepted by
+         sw.js's "fetch" handler (cache-first, falls back to network)
+
+================================================================================
+TRACE 2 — script.js FINISHES LOADING -> loop() TAKES OVER
+================================================================================
+
+[script.js] CODE A — screen state enum + starting value
+const S = { LOADING:'loading', WELCOME:'welcome', MODE_SELECT:'mode_select', ... };
+let screen = S.LOADING;
+    |
+    v  (screen='loading' is the INPUT that loop()'s switch statement reads every frame)
+    [script.js] CODE B — function loop() (called once at bottom of file, then
+                          re-calls itself forever via requestAnimationFrame)
+    function loop(){
+      ctx.clearRect(0,0,RW,RH);btns=[];
+      ...
+      switch(screen){
+        case S.LOADING:      uiCtx(drawLoading);break;
+        case S.WELCOME:      uiCtx(drawWelcome);break;
+        ...
+        case S.GAME:
+          updateGame();drawGame();
+          if(gs.over){uiCtx(drawGameOver);}
+          if(gs.won){uiCtx(drawLevelWon);}
+          break;
+      }
+      uiCtx(()=>{drawPopup();drawNameEntry();drawConfetti();drawTransition();});
+      requestAnimationFrame(loop);
+    }
+    loop();
+        |
+        v  (screen===S.LOADING on the very first call, so this branch runs)
+        [script.js] CODE C — function drawLoading() (called by loop()'s switch)
+        function drawLoading(){
+          ...
+          if(loadTimer>=dur){loadTimer=0;loadPhase++;if(loadPhase>=2){
+            loadSave();loadCustomAudio();refreshDailyChallenges();applyVolume();
+            screen=S.WELCOME;
+          }}
+        }
+        => DOES: shows "SAINTSWAR presents" then "FLY BIRDY" splash text with a
+                 progress bar; after ~230 frames it loads save/audio/challenge
+                 data and sets screen=S.WELCOME (feeds back into CODE B's switch
+                 on the NEXT frame)
+    => DOES: this one function is the entire game engine tick — clears the
+             canvas, resets the button hit-list, and paints exactly one screen
+=> DISPLAYS: (frame 1) splash screen; (~4 seconds later) automatically becomes
+             the Welcome screen once loadPhase reaches 2
+
+================================================================================
+TRACE 3 — WELCOME SCREEN (first interactive screen)
+================================================================================
+
+[script.js] CODE A — function drawWelcome() (called by loop() once screen===S.WELCOME)
+function drawWelcome(){
+  const hour=new Date().getHours();
+  const welcomeBg=(hour>=20||hour<6)?'night':'day';
+  drawBg(welcomeBg);
+  ...
+  drawBirdAt(W/2,265,save.selectedBird,true);
+  btn(60,295,280,50,'PLAY','#2ECC71',()=>{screen=S.MODE_SELECT;},20);
+  btn(50,358,135,42,'Scores','#E67E22',()=>{screen=S.HIGH_SCORES;},13);
+  ...
+}
+    |
+    v  (welcomeBg string is the INPUT to drawBg — decides which gradient to paint)
+    [script.js] CODE B — function drawBg(type) (called inside code A)
+    function drawBg(type){
+      ...
+      if(type==='day'){ ... }
+      else if(type==='night'){ ... }
+      ...
+    }
+    => DOES: paints the sky/ground gradient + stars/moon behind everything else
+    |
+    v  (save.selectedBird string, e.g. "sparrow", is the INPUT to drawBirdAt)
+    [script.js] CODE C — function drawBirdAt(x,y,birdKey,...) (called inside code A)
+    function drawBirdAt(x,y,birdKey,flapUp=false,skinOverride=null){
+      const skin=skinOverride||getActiveSkin(birdKey);
+      ...
+      ctx.fillStyle=b.body;ctx.beginPath();ctx.ellipse(0,0,17,12,0,0,Math.PI*2);ctx.fill();
+      ...
+    }
+    => DOES: draws the equipped bird sprite at the given x/y using its equipped skin color
+    |
+    v  (x,y,w,h,label,color,action are literal INPUTS the caller hardcodes per button)
+    [script.js] CODE D — function btn(x,y,w,h,label,color,action,...) (called 6x inside code A)
+    function btn(x,y,w,h,label,color,action,fontSize=15,disabled=false){
+      const t=ctx.getTransform(); btns.push({x:x*t.a+t.e,y:y*t.d+t.f,w:w*t.a,h:h*t.d,action:...});
+      ...
+      ctx.fillText(label,x+w/2,y+h/2);
+      ...
+    }
+        |
+        v  (the tap coordinates the PLAYER produces are the INPUT here, later)
+        [script.js] CODE E — function hitBtn(px,py) (called from the pointerup
+                              listener, NOT from drawWelcome — happens on next tap)
+        function hitBtn(px,py){
+          for(const b of btns){
+            if(b.action&&px>=b.x&&px<=b.x+b.w&&py>=b.y&&py<=b.y+b.h){
+              SFX.click();b.action();return true;
+            }
+          }
+          return false;
+        }
+            |
+            v  (b.action for the PLAY button is this literal arrow function)
+            [script.js] CODE F — PLAY button's action (defined inside code A,
+                                  executed here inside code E when tapped)
+            ()=>{screen=S.MODE_SELECT;}
+            => DOES: flips the global `screen` variable
+        => DOES: finds whichever button's rectangle contains the tap and runs
+                 its stored action
+    => DOES: draws a rounded button AND remembers its clickable rectangle+action
+             in the shared btns[] array for hitBtn() to check later
+=> DISPLAYS: title card "Welcome to 'Fly Birdy'", the equipped bird, and 6
+             buttons (PLAY / Scores / Settings / Birds / Achieve / Challenge)
+             — tapping PLAY sets screen=S.MODE_SELECT, which loop() picks up
+             on the very next frame (see Trace 4)
+
+================================================================================
+TRACE 4 — MODE SELECT (after tapping PLAY)
+================================================================================
+
+[script.js] CODE A — screen=S.MODE_SELECT (the x-value RETURNED by Trace 3's tap)
+    |
+    v  (screen is now S.MODE_SELECT — INPUT to loop()'s switch next frame)
+    [script.js] CODE B — function drawModeSelect() (called by loop())
+    function drawModeSelect(){
+      drawBg('day');
+      btn(6,6,70,26,'< Back','#444',()=>{screen=S.WELCOME;},12);
+      ...
+      btn(220,314,150,22,'PLAY ►','#B06000',()=>{initGameState(1,'time_trial');screen=S.GAME;startMusic();},12);
+      ...
+    }
+        |
+        v  (levelId=1, mode='time_trial' are literal INPUTS hardcoded on this
+            particular button; other buttons pass 'survival'/'gauntlet', or
+            just change `screen` with no init call)
+        [script.js] CODE C — function initGameState(levelId,mode) (called
+                              inside one of code B's button actions, only for
+                              Time Trial / Survival / Gauntlet — Adventure and
+                              Unlimited instead just change `screen` and let
+                              LEVEL_SELECT / UNLIMITED_OPTS call this later)
+        function initGameState(levelId,mode){
+          const lvl=(mode==='unlimited')?{...LEVELS[0],bg:'day'}:{...LEVELS[levelId-1]};
+          ...
+          gs={ mode,levelId,level:lvl,bird:save.selectedBird, birdY:RH/2,velocity:0,score:0, ... };
+          ...
+        }
+        => DOES: builds a brand-new `gs` object (pipes/coins/HP/etc. all reset)
+                 — this `gs` becomes the INPUT every gameplay function reads
+                 for the rest of the run
+            |
+            v  (gs is now populated — INPUT to startMusic())
+            [script.js] CODE D — function startMusic() (called right after
+                                  initGameState() inside code B's button action)
+            function startMusic(){
+              if(musicPlaying||!musicEnabled)return;
+              musicPlaying=true;
+              if(customMusicBuffer){ startCustomMusic(); return; }
+              resumeAudio(); scheduleLoop(audioCtx.currentTime);
+            }
+            => DOES: starts the looping background melody (or the player's
+                     custom uploaded track if one exists)
+    => DOES: lists the 5 mode cards; each PLAY button either jumps to a
+             sub-select screen or calls CODE C directly
+=> DISPLAYS: Mode Select screen with 5 cards (Adventure/Unlimited/Time
+             Trial/Survival/Gauntlet); picking Time Trial/Survival/Gauntlet
+             sets screen=S.GAME immediately (skips straight to Trace 7)
+
+================================================================================
+TRACE 5 — LEVEL SELECT (only if Adventure was tapped in Trace 4)
+================================================================================
+
+[script.js] CODE A — screen=S.LEVEL_SELECT (x-value returned by tapping "Adventure PLAY ►")
+    |
+    v
+    [script.js] CODE B — function drawLevelSelect() (called by loop())
+    function drawLevelSelect(){
+      ...
+      for(let i=0;i<10;i++){
+        const unlocked=lvl<=save.unlockedLevels;
+        pushBtn(x,y,bw,bh,unlocked?(()=>{initGameState(lvl,'adventure');screen=S.GAME;startMusic();}):null);
+        ...
+      }
+      ...
+    }
+        |
+        v  (save.unlockedLevels number is the INPUT deciding which tiles are tappable)
+        [script.js] CODE C — function pushBtn(x,y,w,h,action) (called 10x
+                              inside code B's loop, once per level tile)
+        function pushBtn(x,y,w,h,action){
+          const t=ctx.getTransform(); btns.push({x:x*t.a+t.e,y:y*t.d+t.f,w:w*t.a,h:h*t.d,action});
+        }
+        => DOES: registers an invisible clickable rectangle (no visible button
+                 chrome — the tile's colored graphic is drawn separately by
+                 roundRect() right after)
+            |
+            v  (tapping an unlocked tile — action runs via hitBtn(), same
+                chain as Trace 3 CODE E)
+            [script.js] CODE D — tile's action -> initGameState(lvl,'adventure')
+            initGameState(lvl,'adventure');screen=S.GAME;startMusic();
+            => DOES: same as Trace 4 CODE C/D, but with mode='adventure' and
+                     the specific level's LEVELS[lvl-1] config (gap widened +40
+                     for adventure specifically)
+    => DOES: draws a 5x2 grid of level tiles, colored by difficulty
+             (green/orange/purple/red), greyed out with "?" if locked
+=> DISPLAYS: 10 level tiles + a footer showing the equipped bird's name/skill
+             (tapping the footer sends screen=S.BIRD_SELECT, Trace 6)
+
+================================================================================
+TRACE 6 — BIRD SELECT / SHOP
+================================================================================
+
+[script.js] CODE A — function drawBirdSelect() (called by loop() while screen===S.BIRD_SELECT)
+function drawBirdSelect(){
+  ...
+  btn(20,55,175,40,...,()=>{shopTab='birds';},14);
+  btn(205,55,175,40,...,()=>{shopTab='skins';},14);
+  if(shopTab==='birds'){
+    BIRD_KEYS.forEach((key,i)=>{
+      const bird=BIRDS[key],unlocked=save.unlockedBirds.includes(key),...
+      ...
+      if(!unlocked){
+        btn(256,y+16,110,38,'Unlock','#E67E22',()=>{
+          if(save.coins>=bird.cost){save.coins-=bird.cost;save.unlockedBirds.push(key);save.selectedBird=key;writeSave();SFX.levelup();}
+          else showPopup('Not enough coins!');
+        },13);
+      }
+    });
+  }
+  ...
+}
+    |
+    v  (BIRD_KEYS array + BIRDS{} table are the INPUT data this loop reads)
+    [script.js] CODE B — const BIRDS{} / BIRD_KEYS (static data, defined at
+                          top of file, read here as INPUT)
+    const BIRDS={ sparrow:{name:'Sparrow',cost:0,...}, eagle:{name:'Eagle',cost:50,...}, ... };
+    const BIRD_KEYS=Object.keys(BIRDS);
+    => DOES: supplies name/cost/color/skill description per bird — nothing
+             executes here, it's just a lookup table
+    |
+    v  (tapping "Unlock" — the arrow function itself is code C, runs via hitBtn())
+    [script.js] CODE C — Unlock button's action (nested inside code A)
+    ()=>{
+      if(save.coins>=bird.cost){save.coins-=bird.cost;save.unlockedBirds.push(key);save.selectedBird=key;writeSave();SFX.levelup();}
+      else showPopup('Not enough coins!');
+    }
+        |
+        v  (the whole `save` object is the INPUT/OUTPUT here — mutated then persisted)
+        [script.js] CODE D — function writeSave() (called inside code C, only
+                              on the success branch)
+        function writeSave(){ try{localStorage.setItem(SAVE_KEY,JSON.stringify(save));}catch(_){} }
+        => DOES: serializes the whole `save` object to localStorage[SAVE_KEY]
+                 (persists correctly now that SAVE_KEY is declared — see note below)
+    => DOES: either deducts coins + unlocks + equips the bird, or shows a
+             "Not enough coins!" popup via showPopup()
+=> DISPLAYS: Shop screen with Birds/Skins tabs; each bird row shows cost or
+             an Equip button; buying/equipping changes save.selectedBird,
+             which is the x-value that Trace 3 CODE C (drawBirdAt) and Trace
+             7 (gameplay skill checks) both read afterward
+
+NOTE (bug found and fixed): CODE D above references `SAVE_KEY`, which was
+previously never declared anywhere in script.js, causing writeSave()/
+loadSave() to silently no-op inside their try/catch — no coins, birds, or
+settings persisted across a reload. FIXED: added
+`const SAVE_KEY='flybirdy_v1';` directly above the `let save={...}` block.
+
+================================================================================
+TRACE 7 — UNLIMITED OPTIONS (only if Unlimited was tapped in Trace 4)
+================================================================================
+
+[script.js] CODE A — function drawUnlimitedOpts() (called by loop())
+function drawUnlimitedOpts(){
+  ...
+  pushBtn(ddX,ddY,ddW,ddH,()=>{unlimitedDropOpen=!unlimitedDropOpen;SFX.click();});
+  if(unlimitedDropOpen){
+    ENDLESS_MODS.forEach((mod,i)=>{
+      ...
+      if(!blocked){
+        pushBtn(ddX,ry,ddW,rowH,()=>{
+          if(selectedMods.has(mod)) selectedMods.delete(mod); else selectedMods.add(mod);
+          SFX.click();
+        });
+      }
+    });
+  }
+  ...
+  btn(80,startY,240,52,'START','#8E44AD',()=>{
+    unlimitedDropOpen=false;
+    initGameState(1,'unlimited');screen=S.GAME;startMusic();
+  },18);
+}
+    |
+    v  (ENDLESS_MODS[]/MOD_CONFLICTS{} constant tables are the INPUT deciding
+        which checkbox rows are drawn and which are greyed out)
+    [script.js] CODE B — const ENDLESS_MODS / MOD_CONFLICTS (static data)
+    const ENDLESS_MODS=['mirror','tiny','zen','weather','reverse','slow_miss','milestone','pipe_rush','double_gap','moving_pipes','low_grav','fog','coin_frenzy','ghost_pipes'];
+    const MOD_CONFLICTS={ zen:['ghost_pipes'], ghost_pipes:['zen','double_gap'], ... };
+    => DOES: `blocked` is computed per row by checking if any already-selected
+             mod lists this row as a conflict — pure data lookup, no side effect
+    |
+    v  (selectedMods Set built up by the checkbox taps is the INPUT to initGameState)
+    [script.js] CODE C — function initGameState(1,'unlimited') (called inside
+                          the START button's action, nested in code A)
+    if(mode==='unlimited'){
+      activeMods.clear();
+      if(selectedMods.size===0){ modRotateAt=20; }
+      else{ ENDLESS_MODS.forEach(m=>{ if(selectedMods.has(m)) activeMods.add(m); }); modRotateAt=Infinity; }
+      ghostFrames=[]; loadGhost();
+    }
+    => DOES: copies the player's manual mod choices into `activeMods` (or
+             leaves it empty for random rotation), and loads the saved ghost
+             replay data from localStorage
+=> DISPLAYS: dropdown mod picker + Practice Mode toggle + START button;
+             tapping START builds `gs` with the chosen modifiers and jumps to
+             screen=S.GAME (Trace 8)
+
+================================================================================
+TRACE 8 — S.GAME (active gameplay — the core update+render pair, every frame)
+================================================================================
+
+[script.js] CODE A — loop()'s GAME case (INPUT: screen===S.GAME, set by any of
+                      Traces 4/5/6/7's PLAY/START buttons)
+case S.GAME:
+  updateGame();drawGame();
+  if(gs.over){uiCtx(drawGameOver);}
+  if(gs.won){uiCtx(drawLevelWon);}
+  break;
+    |
+    v  (gs object built by initGameState() is the INPUT updateGame() mutates)
+    [script.js] CODE B — function updateGame() (called first, every frame)
+    function updateGame(){
+      if(!gs.started||gs.over||gs.won)return;
+      gs.frameCount++;
+      ...
+      gs.velocity+=grav;gs.birdY+=gs.velocity;
+      for(const p of gs.pipes){
+        ...
+        if(!p.scored&&p.x+50<BX){
+          p.scored=true;gs.score++;SFX.score();
+          ...
+        }
+      }
+      ...
+      for(const p of gs.pipes){ ... if(bR2>p.x&&bL<p.x+50&&(bT<p.topH||bBot>gapY)){takeDamage();break;} ... }
+      ...
+    }
+        |
+        v  (collision detected — the INPUT is simply "a collision happened";
+            takeDamage() is called with no arguments)
+        [script.js] CODE C — function takeDamage() (called inside code B, once
+                              per frame per collision source: pipes/enemies/
+                              boss/enemy bullets/floor)
+        function takeDamage(){
+          if(gs.invincible>0)return;
+          if(activeMods.has('zen'))return;
+          ...
+          gs.hp--;gs.invincible=100;
+          ...
+          if(gs.hp<=0){
+            ...
+            gs.over=true;stopMusic();save.coins+=gs.sessionCoins;
+            ...
+            checkAchievements(); checkDailyChallenges(); writeSave();
+            if(!gs.nameEntered){
+              gs.nameEntered=true;
+              if(isTopScore(gs.score)){
+                SFX.highScore();
+                askPlayerName(name=>addHighScore(name,gs.score));
+              }
+            }
+          }
+        }
+            |
+            v  (gs.score number is the INPUT to isTopScore)
+            [script.js] CODE D — function isTopScore(score) (called inside code C)
+            function isTopScore(score){
+              return save.highScores.length<5||score>save.highScores[save.highScores.length-1].score;
+            }
+            => RETURNS: boolean — true if this run's score beats the current #5 entry
+                |
+                v  (true is the INPUT that gates the next call)
+                [script.js] CODE E — function askPlayerName(cb) (called inside
+                                      code C only if code D returned true)
+                function askPlayerName(cb){
+                  nameEntry.active=true;nameEntry.text='PLAYER';nameEntry.onDone=cb;
+                  const el=document.getElementById('nameInput');
+                  if(el){el.value='PLAYER';el.select();el.focus();}
+                }
+                => DOES: focuses the hidden HTML <input id="nameInput"> from
+                         index.html so the mobile keyboard pops up; stores the
+                         callback `name=>addHighScore(name,gs.score)` for later
+                    |
+                    v  (later, PLAYER TAPS "Done" -> submitPlayerName() runs,
+                        reading el.value as its INPUT — this is a DIFFERENT
+                        frame, not nested inside code E's call itself)
+                    [script.js] CODE F — function submitPlayerName() (bound
+                                          to the Done button drawn by
+                                          drawNameEntry(), fires on next tap)
+                    function submitPlayerName(){
+                      const el=document.getElementById('nameInput');
+                      const name=((el?el.value:nameEntry.text)||'BIRD').trim().substring(0,12)||'BIRD';
+                      nameEntry.active=false;
+                      document.getElementById('nameInput').blur();
+                      if(nameEntry.onDone) nameEntry.onDone(name.toUpperCase());
+                    }
+                        |
+                        v  (name string, e.g. "ACE", is the INPUT/x-value
+                            returned into the stored callback)
+                        [script.js] CODE G — function addHighScore(name,score)
+                                              (called inside code F, via the
+                                              onDone callback from code E)
+                        function addHighScore(name,score){
+                          save.highScores.push({name:(name||'BIRD').substring(0,12).toUpperCase(),score});
+                          save.highScores.sort((a,b)=>b.score-a.score);
+                          save.highScores=save.highScores.slice(0,5);
+                          writeSave();
+                        }
+                        => DOES: inserts the entry, re-sorts descending, keeps
+                                 only the top 5, then persists via writeSave()
+        => DOES: the whole damage pipeline — invincibility/zen/shield checks,
+                 HP decrement, and on death: stop music, bank coins, log run
+                 history, check achievements/challenges, and (conditionally)
+                 kick off the name-entry flow above
+    => DOES: this is the entire per-frame physics/spawn/collision simulation
+             — one call, mutates `gs` in place, no direct screen output itself
+    |
+    v  (gs, now updated, is the INPUT to drawGame())
+    [script.js] CODE H — function drawGame() (called second, same frame, right
+                          after code B in code A)
+    function drawGame(){
+      inGameDraw=true;
+      ...
+      drawBg(gs.level.bg);drawWeather();
+      drawPipes();drawCoins();drawPowerups();drawEnemies();drawBullets();
+      ...
+      drawBirdAt(BX,gs.birdY,gs.bird,gs.velocity<-2);
+      ...
+      drawHUD();
+      if(gs.started&&!gs.over&&!gs.won){
+        btn(RW-40,RH-44,34,32,'||','#222',()=>{screen=S.PAUSED;stopMusic();},14);
+      }
+      ...
+    }
+    => DOES: paints background/pipes/coins/enemies/bullets/bird/particles/HUD
+             for this exact frame's `gs` state, and registers the pause button
+=> DISPLAYS: the live game world; if gs.over became true this frame, the
+             GAME OVER overlay is drawn on top this same frame (Trace 9); if
+             gs.won became true, the LEVEL CLEAR overlay is drawn instead
+
+================================================================================
+TRACE 9 — GAME OVER OVERLAY (x-value gs.over===true, set inside Trace 8 CODE C)
+================================================================================
+
+[script.js] CODE A — gs.over=true (the x-value returned/set by takeDamage())
+    |
+    v
+    [script.js] CODE B — function drawGameOver() (called by loop()'s GAME case,
+                          conditionally, right after drawGame())
+    function drawGameOver(){
+      ...
+      ctx.fillText('Score: '+gs.score,W/2,214);
+      ctx.fillText('Coins: +'+gs.sessionCoins,W/2,250);
+      btn(42,318,145,54,'Retry','#27AE60',()=>{initGameState(gs.levelId,gs.mode);screen=S.GAME;startMusic();},16);
+      btn(213,318,145,54,'Menu','#E74C3C',()=>{stopMusic();screen=S.WELCOME;},16);
+      btn(42,384,316,44,'View High Scores','#E67E22',()=>{screen=S.HIGH_SCORES;},13);
+    }
+        |
+        v  (gs.levelId,gs.mode from the JUST-ENDED run are the INPUT to a
+            fresh initGameState() call if Retry is tapped)
+        [script.js] CODE C — Retry button's action (nested in code B)
+        ()=>{initGameState(gs.levelId,gs.mode);screen=S.GAME;startMusic();}
+        => DOES: rebuilds `gs` from scratch with the same level/mode and
+                 sends screen back to S.GAME — restarts Trace 8 from the top
+    => DOES: reads gs.score/gs.sessionCoins/save.coins (all already finalized
+             by Trace 8 CODE C) purely to display them — no further mutation
+=> DISPLAYS: "GAME OVER" panel with final score/coins and Retry/Menu/View
+             High Scores buttons
+
+================================================================================
+TRACE 10 — HIGH SCORES (reachable from Welcome "Scores" or Game Over "View High Scores")
+================================================================================
+
+[script.js] CODE A — function drawHighScores() (called by loop())
+function drawHighScores(){
+  ...
+  btn(20,56,175,32,...,()=>{hsTab='top5';},12);
+  btn(205,56,175,32,...,()=>{hsTab='history';},12);
+  if(hsTab==='top5'){
+    save.highScores.slice(0,5).forEach((hs,i)=>{
+      ...
+      ctx.fillText((i<3?['1st','2nd','3rd'][i]:(i+1)+'.')+' '+(hs.name||'BIRD'),50,y);
+      ctx.fillText(hs.score,354,y);
+      ...
+    });
+  }else{
+    const hist=save.runHistory||[];
+    ...
+  }
+}
+    |
+    v  (save.highScores[] array — populated earlier by Trace 8's addHighScore()
+        chain — is the INPUT this .forEach() iterates over)
+    [script.js] CODE B — Array.prototype.forEach callback (nested inside code A)
+    (hs,i)=>{ ... ctx.fillText(...) ... }
+    => DOES: for each of the (up to) 5 saved entries, draws its rank/name/score
+=> DISPLAYS: "Top 5" tab (medal-colored rows) or "Run History" tab (last 10
+             runs with mode/score/bird/mods/date), switchable via the two tabs
+
+================================================================================
+TRACE 11 — SETTINGS -> AUDIO (nested sub-screen)
+================================================================================
+
+[script.js] CODE A — function drawSettings() (called by loop() while screen===S.SETTINGS)
+function drawSettings(){
+  ...
+  toggleRow('Music',save.settings.music,62,()=>{save.settings.music=!save.settings.music;musicEnabled=save.settings.music;if(!musicEnabled)stopMusic();writeSave();});
+  ...
+  if(caVy>56&&caVy<H) btn(28,caVy,344,42,'Custom Audio ►','#1A5276',()=>{screen=S.AUDIO;},13);
+}
+    |
+    v  (label,val,y,action are literal per-row INPUTS supplied at each call site)
+    [script.js] CODE B — function toggleRow(label,val,y,action) (a LOCAL
+                          function DEFINED AND CALLED inside code A, once per
+                          settings row — not a global function)
+    function toggleRow(label,val,y,action){
+      const vy=y-sc; if(vy+46<56||vy>H)return;
+      roundRect(28,vy,344,46,10,'rgba(0,0,0,0.35)','#555');
+      ctx.fillText(label,46,vy+22);
+      btn(244,vy+6,106,34,val?'ON':'OFF',val?'#27AE60':'#E74C3C',action,13);
+    }
+    => DOES: draws one row's background panel + label + an ON/OFF button whose
+             color reflects the current boolean; delegates the actual click
+             registration to btn() (same CODE D pattern as Trace 3)
+    |
+    v  (tapping "Custom Audio ►" — action () => {screen=S.AUDIO;})
+    [script.js] CODE C — screen=S.AUDIO (x-value set by the button's action)
+        |
+        v
+        [script.js] CODE D — function drawAudio() (called by loop() next
+                              frame, now that screen===S.AUDIO)
+        function drawAudio(){
+          ...
+          btn(60,155,280,40,'Upload Music File','#2C3E50',()=>{
+            const inp=document.createElement('input');inp.type='file';inp.accept='audio/*';
+            inp.onchange=e=>{const f=e.target.files[0];if(!f)return;
+              _saveClip('music',f);_blobToBuffer(f,buf=>{if(buf){customMusicBuffer=buf;showPopup('Music loaded!');}else showPopup('Could not decode file');});
+            };inp.click();
+          },13);
+          ...
+        }
+            |
+            v  (e.target.files[0], the File the OS file-picker returns, is
+                the INPUT to _saveClip/_blobToBuffer)
+            [script.js] CODE E — function _saveClip(key,blob) + _blobToBuffer(blob,cb)
+                                  (both called inside code D's inp.onchange handler)
+            function _saveClip(key,blob){ _openADB(db=>{if(!db)return; db.transaction('clips','readwrite').objectStore('clips').put(blob,key);}); }
+            function _blobToBuffer(blob,cb){ blob.arrayBuffer().then(ab=>audioCtx.decodeAudioData(ab).then(cb).catch(()=>cb(null))).catch(()=>cb(null)); }
+            => DOES: persists the raw file into IndexedDB under key "music",
+                     AND separately decodes it into an AudioBuffer for playback
+        => DISPLAYS: Music/SFX tabs, upload/remove buttons, and (once a
+                     custom track exists) a draggable trim bar
+    => DOES: none further this frame — code A's remaining rows (Graphics,
+             Haptic Strength, Export/Import Save, volume sliders) follow the
+             same toggleRow/multiRow/volRow local-function pattern as code B
+=> DISPLAYS: (Settings) full scrollable preferences list; (Audio, once
+             entered) custom sound upload UI, whose result (customMusicBuffer)
+             is read back by Trace 2/4's startMusic() the next time music plays
+
+================================================================================
+TRACE 12 — ACHIEVEMENTS & DAILY CHALLENGE (read-only display screens)
+================================================================================
+
+[script.js] CODE A — function checkAchievements() (called from INSIDE Trace 8
+                      CODE B's updateGame(), every time a pipe is scored or on death)
+function checkAchievements(){
+  if(gs.score>=1) unlockAchv('first_pipe');
+  if(save.coins>=100) unlockAchv('coins_100');
+  ...
+}
+    |
+    v  (achievement id string, e.g. 'first_pipe', is the INPUT to unlockAchv)
+    [script.js] CODE B — function unlockAchv(id) (called repeatedly inside code A)
+    function unlockAchv(id){
+      if(save.achievements[id])return;
+      save.achievements[id]=true;
+      writeSave();
+      const a=ACHV.find(x=>x.id===id);
+      if(a) showPopup(a.icon+' Achieved: '+a.name);
+    }
+    => DOES: flips save.achievements[id] to true (once), persists it, and
+             pops up a short "🎯 Achieved: First Blood" toast via showPopup()
+        |
+        v  (much later, PLAYER opens the Achievements screen — save.achievements{}
+            written above is now the INPUT this screen reads)
+        [script.js] CODE C — function drawAchievements() (called by loop()
+                              while screen===S.ACHIEVEMENTS)
+        function drawAchievements(){
+          ...
+          ACHV.forEach((a,i)=>{
+            const done=!!save.achievements[a.id];
+            roundRect(x,y,bw,bh,8,done?'rgba(0,120,60,0.45)':'rgba(0,0,0,0.45)',...);
+            ...
+          });
+        }
+        => DISPLAYS: a 2-column grid of all 20 achievements, green+checkmarked
+                     if save.achievements[id] is true, grey otherwise
+=> DOES (overall): unlocking happens live during gameplay (code A/B); viewing
+         happens later on a completely separate screen (code C) that just
+         reads the same persisted `save.achievements` object
+
+Daily Challenge follows the identical two-phase pattern:
+  [script.js] checkDailyChallenges() (called inside Trace 8 CODE C, on death)
+    -> reads dailyChallenges[] (seeded daily by refreshDailyChallenges()'s
+       date-hash) -> if ch.check(gs) passes, sets save.challengeDone[i]=true,
+       adds save.coins+=ch.reward, writeSave(), showPopup('Challenge done! ...')
+  [script.js] drawChallenge() (called by loop() while screen===S.CHALLENGE)
+    -> reads save.challengeDone[]/save.challengeProgress[] to render each of
+       the 3 cards as "in progress" or "✔ COMPLETED"
+
+================================================================================
+LEGEND / HOW TO READ NESTING ABOVE
+================================================================================
+- Indentation level = call depth. A block indented once deeper than its
+  parent means "this function/handler is invoked from inside the parent's
+  code body," exactly like your example:
+      code A (some .html)
+          code B (some .js, receives code A's element as input)
+              code C (called inside code B)
+          rest of B
+      => what A causes to happen on screen, in one line
+- "=> DOES / DISPLAYS" always summarizes the RETURN VALUE or ON-SCREEN
+  EFFECT of the block directly above it, once its own nested calls (if any)
+  have finished running.
+- Where a nested call happens on a LATER frame/event (e.g. a button's stored
+  action, which only runs the next time the player taps something) this is
+  called out explicitly, since it is not a same-frame nested call.

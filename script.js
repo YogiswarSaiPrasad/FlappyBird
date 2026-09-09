@@ -209,6 +209,7 @@ function drawAudio(){
 }
 
 
+const SAVE_KEY='flybirdy_v1';
 let save={
   unlockedLevels:1,coins:0,
   highScores:[{name:'SWIFT',score:500},{name:'BLAZE',score:400},{name:'NOVA',score:300},{name:'REX',score:200},{name:'ACE',score:100}],

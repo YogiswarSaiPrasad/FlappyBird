@@ -168,6 +168,13 @@
 
 ---
 
+## v0.8 — Save Persistence Fix · 2026-09-09
+
+- **Fixed:** `SAVE_KEY` was referenced in `loadSave()` / `writeSave()` but never declared anywhere in `script.js`; both calls were wrapped in `try/catch`, so this silently failed and no progress (coins, unlocked birds/skins, high scores, settings, achievements, daily challenge state) persisted across a reload
+- Added `const SAVE_KEY='flybirdy_v1';` directly above the `let save={...}` declaration — `localStorage` save/load now works as intended
+
+---
+
 ## Infrastructure
 
 | File | Purpose |

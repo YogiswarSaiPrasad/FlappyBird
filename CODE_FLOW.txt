@@ -1,0 +1,547 @@
+================================================================================
+FLY BIRDY — CODE FLOW DOCUMENTATION
+================================================================================
+Ordered by SCREEN LOADING SEQUENCE (the order the player actually sees them).
+Format for every entry:
+  FILE       - where the code lives
+  CALLED BY  - what triggers it / how it is invoked
+  PARAMS     - parameters required to call it
+  RETURNS    - what it returns
+  DOES       - what the block of code does
+  WHY        - why it exists
+  STEPS      - how it processes step by step
+
+NOTE ON BUG THAT WAS FOUND AND FIXED:
+  script.js used a global `SAVE_KEY` in loadSave() and writeSave() but
+  SAVE_KEY was never declared anywhere in the file. Both calls were wrapped
+  in try/catch, so this threw a silent ReferenceError every time and
+  save/load to localStorage did nothing (game state reset on every reload).
+  FIXED: added `const SAVE_KEY='flybirdy_v1';` directly above the
+  `let save={...}` declaration in the SAVE / STATE section. Persistence now
+  works correctly (loadSave/writeSave read/write localStorage as intended).
+
+================================================================================
+STAGE 0 — APP BOOTSTRAP (before any screen is drawn)
+================================================================================
+
+FILE: index.html
+CALLED BY: browser navigating to the app (Capacitor WebView or PWA launch)
+PARAMS: none
+RETURNS: n/a (HTML document)
+DOES:
+  - Declares <canvas id="game"> (the entire game renders into this one element)
+  - Declares hidden <input id="nameInput"> used later for leaderboard name entry
+  - Loads style.css, manifest.json, then script.js (defer-less <script> tag)
+  - Inline script registers the service worker: navigator.serviceWorker.register("./sw.js")
+WHY: Single-canvas architecture keeps the whole game as one draw surface;
+     the hidden input exists because prompt() is unreliable inside Capacitor
+     WebViews and does not bring up the mobile keyboard.
+STEPS:
+  1. Parse <head> — apply style.css, register manifest.json for PWA install
+  2. Parse <body> — create canvas + hidden input elements
+  3. Execute script.js top-to-bottom (see Stage 1)
+  4. Execute inline script → register sw.js for offline caching
+
+FILE: sw.js
+CALLED BY: navigator.serviceWorker.register("./sw.js") call in index.html
+PARAMS: none
+RETURNS: n/a (event-driven service worker)
+DOES:
+  - "install" event: opens CACHE_NAME ("flybirdy-v4") and pre-caches ASSETS
+    array (index.html, style.css, script.js, manifest.json, icon-192.png,
+    icon-512.png); calls self.skipWaiting() to activate immediately
+  - "activate" event: deletes any cache whose key != CACHE_NAME (clears old
+    versions), then self.clients.claim()
+  - "fetch" event: cache-first strategy — caches.match(request) else fetch()
+WHY: Lets the game work fully offline once installed / first loaded.
+STEPS:
+  1. Browser installs SW on first visit → pre-cache all assets
+  2. On activate, stale caches from previous versions are purged
+  3. Every subsequent network request is served from cache first
+
+FILE: manifest.json
+CALLED BY: browser/OS install prompt (PWA) or Capacitor at native build time
+PARAMS: none
+RETURNS: n/a (static manifest)
+DOES: Declares app name, standalone display mode, portrait orientation,
+      background/theme colors, and 192/512 icons.
+WHY: Enables "Add to Home Screen" / native shell packaging with correct icon
+     and no browser chrome.
+
+FILE: capacitor.config.json / package.json
+CALLED BY: Capacitor CLI + GitHub Actions CI (.github/workflows/build-apk.yml)
+PARAMS: none (build-time config)
+RETURNS: n/a
+DOES: capacitor.config.json points Capacitor at webDir "www" and sets Android
+      status bar styling; package.json pins @capacitor/android|cli|core ^6.
+      build-apk.yml copies index.html/style.css/script.js/manifest.json/sw.js/
+      icons into www/, runs `cap sync android`, generates launcher icons with
+      ImageMagick, then `gradlew assembleDebug` to produce the APK artifact.
+WHY: Wraps the same web code as an installable Android APK without any
+     separate native codebase.
+
+================================================================================
+STAGE 1 — script.js TOP-LEVEL EXECUTION (runs once, synchronously, on load)
+================================================================================
+
+FILE: script.js (lines 1–20)
+CALLED BY: <script src="script.js"> in index.html
+PARAMS: none
+RETURNS: n/a
+DOES:
+  - Grabs canvas + 2D context: `const canvas`, `const ctx`
+  - Defines virtual UI space constants W=400, H=600 (never change)
+  - Reads real screen size into RW/RH and sizes the canvas to it
+  - Registers a 'resize' listener that updates RW/RH, canvas size, BX
+    (bird X position), and regenerates background stars
+WHY: The game is designed in a fixed 400x600 logical coordinate space for
+     menus, but gameplay draws in real device pixels (RW/RH) for full-bleed
+     visuals; resize keeps both in sync.
+
+FILE: script.js (lines 20–21)
+DOES: Defines the screen-state enum `S` (LOADING, WELCOME, MODE_SELECT,
+      LEVEL_SELECT, BIRD_SELECT, SETTINGS, HIGH_SCORES, GAME, PAUSED, AUDIO,
+      ACHIEVEMENTS, CHALLENGE, UNLIMITED_OPTS) and sets `let screen = S.LOADING`.
+WHY: `screen` is the single state-machine variable that decides which
+     draw/update function runs each animation frame — this is the backbone
+     of the whole app's flow.
+
+FILE: script.js — AUDIO SYSTEM SETUP (lines ~24–150)
+CALLED BY: executes at load time (creates AudioContext + gain nodes); the
+           functions inside are called later during gameplay/menus
+PARAMS/RETURNS/DOES per function:
+  - resumeAudio() — PARAMS: none. RETURNS: none. Resumes audioCtx if suspended
+    (required by browser autoplay policy; must run from a user gesture).
+  - applyVolume() — PARAMS: none. RETURNS: none. Copies save.settings.musicVol/
+    soundVol into the two master GainNodes.
+  - playTone(freq,type,dur,vol) — PARAMS: frequency Hz, oscillator type,
+    duration sec, volume 0-1. RETURNS: none. Creates one oscillator+gain,
+    ramps gain to ~0, and plays it (fire-and-forget synth blip).
+  - SFX{} — object of named sound effects (flap, score, die, coin, shoot,
+    hit, click, levelup, highScore, lowHealth, heart, shield, magnet), each
+    calling playTone() (or playCustomOnce() first if a custom clip exists).
+  - startMusic()/scheduleLoop(t)/stopMusic() — loop the MELODY array of
+    oscillator notes indefinitely by re-scheduling itself, or play
+    customMusicBuffer if the user uploaded one. stopMusic() stops all
+    pending nodes and releases the wake lock.
+  - Custom audio DB (_openADB, _saveClip, _loadClip, _deleteClip,
+    _blobToBuffer): thin IndexedDB wrapper (DB name "flybirdy_audio_v1")
+    storing uploaded music/SFX blobs and decoding them to AudioBuffers.
+  - loadCustomAudio() — PARAMS: none. RETURNS: none. Loads all 7 custom SFX
+    slots + custom music from IndexedDB into memory on startup.
+  - trimPointerDown/Move/Up(x,y) — pointer handlers for the music trim bar
+    UI on the Audio settings screen; only active while `trimState` is set.
+WHY: All sound is synthesized via Web Audio oscillators so the game ships
+     with zero audio asset files; the custom-audio layer lets a player
+     replace any built-in sound without needing new files bundled.
+
+FILE: script.js — SAVE DATA (lines ~212–257)
+DOES: Declares the `save` object (default state: unlockedLevels, coins,
+      highScores, settings, runHistory, unlockedBirds/selectedBird,
+      purchasedSkins, selectedSkins, achievements, challenge fields) and the
+      functions loadSave(), writeSave(), isTopScore(score), addHighScore(name,score).
+  - loadSave() — PARAMS: none. RETURNS: none. Reads localStorage[SAVE_KEY],
+    merges each known field onto the default `save` object (missing/invalid
+    fields keep defaults), then syncs musicEnabled/soundEnabled flags.
+    (SAVE_KEY is now declared — see bug note at top — so this persists correctly.)
+  - writeSave() — PARAMS: none. RETURNS: none. Serializes `save` to
+    localStorage[SAVE_KEY].
+  - isTopScore(score) — PARAMS: number. RETURNS: boolean — true if score
+    would place in the top 5.
+  - addHighScore(name,score) — PARAMS: name string, score number. RETURNS:
+    none. Pushes entry, sorts descending, truncates to 5, calls writeSave().
+WHY: Central persistence layer everything else (levels, shop, achievements,
+     challenges, ghost data) reads from and writes back to.
+
+FILE: script.js — STATIC GAME DATA (LEVELS, BIRDS, SKINS, ACHV, CHALLENGE_POOL,
+      ENDLESS_MODS/MOD_LABELS/MOD_CONFLICTS)
+DOES: Plain data tables consumed later by initGameState(), drawBirdSelect(),
+      drawAchievements(), refreshDailyChallenges(), and the modifier system.
+  - getActiveSkin(birdKey) — PARAMS: bird id string. RETURNS: the equipped
+    skin object for that bird (falls back to its default skin).
+WHY: Keeps level/bird/skin/achievement/challenge/modifier definitions
+     declarative and in one place instead of scattered through logic.
+
+FILE: script.js — MISC RUNTIME STATE + HELPERS defined at top level
+DOES: shopTab, hsTab, fps counters, wakeLock (+ requestWakeLock/releaseWakeLock),
+      screen-transition state (trans{} + goScreen()/drawTransition()),
+      confetti array + spawnConfetti()/drawConfetti(), name-entry state
+      (nameEntry{} + askPlayerName()/submitPlayerName()/drawNameEntry()),
+      popup state (popup{} + showPopup()/drawPopup()), core game state `gs`,
+      bird collision radius BR, bird X position BX, power-up queue helper
+      makePuQueue(), endless-mode modifier state (activeMods/selectedMods/
+      modRotateAt/pickMods()), ghost-replay system (ghostFrames/ghostPlayback
+      + recordGhostFrame()/saveGhostIfBest()/loadGhost()/drawGhost()), screen
+      shake (shakeTimer/shakeAmt + triggerShake()/applyShake()), vibrate(ms),
+      achievements runtime (achvStats + unlockAchv()/checkAchievements()),
+      daily challenge runtime (dailyChallenges + todayStr()/
+      refreshDailyChallenges()/checkDailyChallenges()), bird active-skill
+      state (holdStartTime/isHolding/owlFreezeLeft/owlFreezeTimer/
+      parrotShieldPipes), initGameState(levelId,mode), star field generation
+      (generateGameStars()), menu cloud animation (menuClouds + setInterval),
+      button system (btns[] + roundRect()/pushBtn()/btn()/hitBtn()),
+      background renderer (drawBg(type)/drawClouds()/moveClouds()), bird
+      sprite renderer (drawBirdAt()), world renderers (drawPipes()/
+      drawCoins()/drawPowerups()/drawEnemies()/drawBoss()/drawBullets()),
+      particle system (spawnParticles()/updateDrawParticles()), HUD
+      (drawHUD()), gameplay logic (spawnPipe()/spawnEnemy()/spawnBoss()/
+      applyPowerup()/takeDamage()/playerFlap()/playerRelease()/updateGame()),
+      weather overlay (drawWeather()), death animation
+      (updateDrawDeathAnim()).
+WHY: These are all supporting functions called from inside the per-screen
+     draw functions listed in Stage 3, or from updateGame()'s per-frame
+     simulation step (Stage 4). They are defined once up front because
+     script.js has no modules — everything is one global scope executed
+     top-to-bottom, then driven by loop().
+
+================================================================================
+STAGE 2 — INPUT LISTENERS REGISTERED (still part of the one-time top-level run)
+================================================================================
+
+FILE: script.js — INPUT section (~line 1861 onward)
+CALLED BY: registered once at load; each one FIRES later based on user action
+PARAMS/DOES:
+  - BACK_SCREEN{} — map of screen → "go back" callback, used by swipe-right,
+    Escape key, and Android hardware back button.
+  - canvas 'pointerdown' — PARAMS: PointerEvent. On press: resumes audio,
+    records swipe start x/y/time, marks scrollDragActive if the current
+    screen is scrollable, forwards to the music-trim UI if active, and
+    calls playerFlap() immediately if screen===GAME (for instant tap feel).
+  - canvas 'pointerup' (x2 handlers) — PARAMS: PointerEvent. Calls
+    playerRelease() during GAME; calls trimPointerUp(); then resolves
+    swipe-back gestures (fast horizontal drag > 60px) or, for a short
+    tap (<20px movement), computes canvas-space coordinates and calls
+    hitBtn(px,py) to fire whichever registered button was tapped.
+  - canvas 'pointermove' — PARAMS: PointerEvent. Drives the audio trim
+    drag handles, and live drag-scrolling on SCROLLABLE_SCREENS (Settings,
+    High Scores, Bird Select, Unlimited Opts).
+  - document 'keydown' — PARAMS: KeyboardEvent. Enter submits name entry;
+    Space triggers playerFlap() during GAME; P toggles PAUSED<->GAME;
+    Escape triggers BACK_SCREEN[screen] if defined.
+  - handleAndroidBack() — PARAMS: none. RETURNS: none. Looks up
+    BACK_SCREEN[screen] and calls it; called by Capacitor's App plugin
+    'backButton' listener and the DOM 'backbutton' fallback event.
+  - document 'visibilitychange' — PARAMS: none (event). If the tab/app is
+    hidden while actively playing, switches screen to PAUSED and stops music.
+WHY: Centralizes all raw input (touch/mouse/keyboard/hardware back/app
+     lifecycle) into the same small set of actions (flap, tap-hit-test,
+     swipe-back, scroll), regardless of which screen is showing.
+
+================================================================================
+STAGE 3 — THE MAIN LOOP STARTS (drives every screen from here on)
+================================================================================
+
+FILE: script.js — function loop() (~line 1978), then `loop();` is called once
+CALLED BY: called once explicitly at the bottom of script.js, then
+           re-invoked every frame via requestAnimationFrame(loop)
+PARAMS: none
+RETURNS: none (runs forever)
+DOES:
+  1. Clears the canvas and resets btns[] (so stale click regions from the
+     previous frame don't linger)
+  2. Updates the rolling FPS counter
+  3. Computes uniform UI scale (uiS) + offsets (uiOX/uiOY) so the fixed
+     400x600 virtual space is centered/letterboxed inside the real screen
+  4. Fills any letterbox bars with the background color
+  5. `switch(screen)` dispatches to exactly one draw function per frame
+     (wrapped in uiCtx() for virtual-space screens, called directly for
+     PAUSED/GAME which manage their own coordinate spaces):
+       LOADING       -> drawLoading()
+       WELCOME       -> drawWelcome()
+       MODE_SELECT   -> drawModeSelect()
+       LEVEL_SELECT  -> drawLevelSelect()
+       BIRD_SELECT   -> drawBirdSelect()
+       HIGH_SCORES   -> drawHighScores()
+       SETTINGS      -> drawSettings()
+       AUDIO         -> drawAudio()
+       ACHIEVEMENTS  -> drawAchievements()
+       CHALLENGE     -> drawChallenge()
+       UNLIMITED_OPTS-> drawUnlimitedOpts()
+       PAUSED        -> drawPaused()
+       GAME          -> updateGame() then drawGame(); if gs.over draw
+                        drawGameOver(); if gs.won draw drawLevelWon()
+  6. Always draws, on top of everything: drawPopup(), drawNameEntry(),
+     drawConfetti(), drawTransition()
+  7. Schedules itself again via requestAnimationFrame(loop)
+WHY: This single function is the entire "game engine" tick — one state
+     variable (`screen`) plus one dispatcher function replaces any need for
+     a scene-graph or router library.
+
+================================================================================
+STAGE 4 — SCREENS IN THE ORDER THE PLAYER ACTUALLY SEES THEM
+================================================================================
+
+--- 4.1  S.LOADING -------------------------------------------------------------
+FILE: script.js — drawLoading()
+CALLED BY: loop() every frame while screen===S.LOADING
+PARAMS: none | RETURNS: none
+DOES: Two-phase crossfade splash: phase 0 shows "SAINTSWAR presents", phase 1
+      shows "FLY BIRDY" + an animated loading bar. Uses loadTimer/loadPhase/
+      LOAD_DUR to time fade-in (30f), hold, fade-out (28f) per phase.
+WHY: Gives the app a branded splash while... (see STEPS) it actually loads
+     save data in the background.
+STEPS:
+  1. Increment loadTimer each frame; compute alpha for fade in/out
+  2. Draw phase-appropriate text + (phase 1 only) a gold progress bar
+  3. When loadTimer reaches the phase duration: reset timer, advance loadPhase
+  4. Once loadPhase >= 2 (both phases done): call loadSave() (restore
+     persisted state), loadCustomAudio() (load any uploaded sounds),
+     refreshDailyChallenges() (seed today's 3 challenges), applyVolume()
+     (push saved volume into gain nodes), then set screen = S.WELCOME
+
+--- 4.2  S.WELCOME --------------------------------------------------------------
+FILE: script.js — drawWelcome()
+CALLED BY: loop() while screen===S.WELCOME (first interactive screen)
+PARAMS: none | RETURNS: none
+DOES: Picks day/night background by real-world hour, draws the title card,
+      an idle preview of the equipped bird (drawBirdAt), and 6 navigation
+      buttons: PLAY, Scores, Settings, Birds, Achieve, Challenge, plus a
+      non-interactive coin-count badge.
+WHY: Home/hub screen — every other screen is reachable from here (directly
+     or via MODE_SELECT), and BACK_SCREEN routes most screens back to it.
+STEPS:
+  1. drawBg('night' or 'day') based on new Date().getHours()
+  2. Draw title card + bird preview
+  3. Register buttons via btn(): PLAY -> screen=S.MODE_SELECT;
+     Scores -> S.HIGH_SCORES; Settings -> S.SETTINGS; Birds -> S.BIRD_SELECT;
+     Achieve -> S.ACHIEVEMENTS; Challenge -> S.CHALLENGE
+  4. Draw coin total readout (save.coins)
+
+--- 4.3  S.MODE_SELECT ----------------------------------------------------------
+FILE: script.js — drawModeSelect()
+CALLED BY: loop() after tapping PLAY on Welcome
+PARAMS: none | RETURNS: none
+DOES: Lists 5 game modes as cards (Adventure, Unlimited, Time Trial,
+      Survival, Gauntlet), each with a PLAY button.
+WHY: Single fork point deciding which mode-specific setup/init path runs.
+STEPS (per card, what its PLAY button does):
+  1. Adventure  -> screen = S.LEVEL_SELECT (further selection needed)
+  2. Unlimited  -> screen = S.UNLIMITED_OPTS (modifier/practice setup needed)
+  3. Time Trial -> initGameState(1,'time_trial'); screen=S.GAME; startMusic()
+  4. Survival   -> initGameState(1,'survival'); screen=S.GAME; startMusic()
+  5. Gauntlet   -> initGameState(1,'gauntlet'); screen=S.GAME; startMusic()
+  6. "< Back" button -> screen = S.WELCOME
+
+--- 4.4  S.LEVEL_SELECT (Adventure only) -----------------------------------------
+FILE: script.js — drawLevelSelect()
+CALLED BY: loop() after choosing Adventure on Mode Select
+PARAMS: none | RETURNS: none
+DOES: Renders a 5-column grid of 10 level tiles (colored/locked per
+      LVL_CLRS/LVL_ICONS and save.unlockedLevels), plus a footer button
+      showing the equipped bird that jumps to BIRD_SELECT.
+WHY: Lets the player pick which of the 10 progressively harder levels to
+     attempt; locked levels are visually disabled until unlocked.
+STEPS:
+  1. For each level i (0–9): compute unlocked = (i+1) <= save.unlockedLevels
+  2. If unlocked, register a tap action:
+     initGameState(i+1,'adventure'); screen=S.GAME; startMusic()
+  3. "< Back" -> screen = S.MODE_SELECT
+  4. Bird footer tap -> screen = S.BIRD_SELECT
+
+--- 4.5  S.BIRD_SELECT (Shop) ----------------------------------------------------
+FILE: script.js — drawBirdSelect()
+CALLED BY: loop(); reachable from Welcome, Level Select, or in-game shop links
+PARAMS: none | RETURNS: none
+DOES: Two-tab shop UI (shopTab: 'birds' | 'skins').
+  - Birds tab: lists BIRD_KEYS with unlock cost or Equip/Unlock buttons.
+  - Skins tab: 2-column grid of SKINS[selectedBird] with Buy/Equip buttons.
+WHY: Coin-sink progression system; changes save.selectedBird / selectedSkins
+     which drawBirdAt() and gameplay skill checks read from everywhere else.
+STEPS (Birds tab, per bird row):
+  1. If !unlocked: "Unlock" button — if save.coins>=cost, deduct coins,
+     push to save.unlockedBirds, set selectedBird, writeSave(), play SFX;
+     else showPopup('Not enough coins!')
+  2. If unlocked && !selected: "Equip" button — set save.selectedBird,
+     writeSave()
+  (Skins tab mirrors this logic against save.purchasedSkins/selectedSkins)
+
+--- 4.6  S.UNLIMITED_OPTS (Unlimited only) ---------------------------------------
+FILE: script.js — drawUnlimitedOpts()
+CALLED BY: loop() after choosing Unlimited on Mode Select
+PARAMS: none | RETURNS: none
+DOES: A dropdown multi-select of the 14 ENDLESS_MODS (conflicts greyed out
+      via MOD_CONFLICTS), a Practice Mode toggle, and a START button.
+WHY: Lets the player pre-choose which endless modifiers apply (or leave
+     selectedMods empty for random auto-rotation) before initGameState()
+     locks in the run.
+STEPS:
+  1. Tap dropdown header -> toggles unlimitedDropOpen
+  2. Tap a mod row (if not blocked by conflict) -> add/remove from
+     selectedMods Set
+  3. Tap Practice Mode row -> toggle practiceMode boolean
+  4. Tap START -> close dropdown, initGameState(1,'unlimited'),
+     screen=S.GAME, startMusic()
+
+--- 4.7  S.GAME (active gameplay) -------------------------------------------------
+FILE: script.js — initGameState(levelId,mode), updateGame(), drawGame()
+CALLED BY: loop() every frame while screen===S.GAME (init happens once,
+           from whichever mode-select action above)
+PARAMS:
+  - initGameState(levelId, mode): levelId (1-10, ignored for unlimited),
+    mode string ('adventure'|'unlimited'|'time_trial'|'survival'|'gauntlet')
+  - updateGame()/drawGame(): no params, operate on module-level `gs`
+RETURNS: none (all mutate global `gs`/`save`/screen)
+DOES:
+  - initGameState(): builds a fresh `gs` object — level config, starting HP
+    (mode/bird dependent), pipes/coins/powerups/enemies/bullets arrays,
+    boss state, per-mode timers (timeLeft for time_trial, gauntletGaps
+    seeded by today's date for gauntlet), weather particle arrays, resets
+    per-run bird skill counters, sets up activeMods per selectedMods, and
+    calls refreshDailyChallenges().
+  - updateGame(): the per-frame simulation, executed only if the run has
+    started and isn't over/won. Order (per in-file comment): tick timers ->
+    handle time-trial countdown -> compute pipeSpeed/speedMult -> spawnPipe()
+    when spacing threshold reached -> spawnEnemy()/spawnBoss() on
+    schedule -> move clouds -> apply gravity to bird -> move/score pipes
+    (triggers achievements/challenges/level-win/gauntlet-win checks) ->
+    move+collect coins -> move+collect/bounce powerups -> move enemies +
+    enemy shooting -> move+bounce boss + boss shooting -> bullet-vs-enemy
+    and bullet-vs-boss collision -> enemy-bullet-vs-bird collision
+    (takeDamage()) -> pipe/barrier AABB collision (takeDamage()) ->
+    enemy/boss contact collision (takeDamage()) -> floor/ceiling collision
+    (respects 'reverse' modifier) -> ghost-beat check.
+  - drawGame(): renders the world in real screen coordinates (inGameDraw=true):
+    background, weather overlay, fog vignette, owl ghost-pipe preview,
+    pipes/coins/powerups/enemies/bullets, shield ring, ghost replay, bird
+    (or death animation if gs.over), particles, milestone flash, active-skill
+    HUD badge, HUD (drawHUD()), pause button, active-mods badge strip, and
+    the "Tap to Start!" overlay before gs.started is true.
+WHY: This is the core gameplay loop — a classic update-then-render frame,
+     split so drawPaused()/drawGameOver()/drawLevelWon() can reuse the same
+     drawGame()-rendered world as a frozen backdrop.
+STEPS (typical single frame while playing):
+  1. loop() calls updateGame() — advance physics/spawns/collisions once
+  2. loop() calls drawGame() — paint the resulting world state
+  3. If gs.over -> also draw drawGameOver() overlay this frame
+  4. If gs.won  -> also draw drawLevelWon() overlay this frame
+  5. Tapping the on-screen pause icon (registered inside drawGame()) sets
+     screen=S.PAUSED and stops music, moving flow to 4.8
+
+--- 4.8  S.PAUSED (reachable mid-game) --------------------------------------------
+FILE: script.js — drawPaused()
+CALLED BY: loop() while screen===S.PAUSED; entered via the in-game pause
+           button, the P key, or auto-pause on visibilitychange
+PARAMS: none | RETURNS: none
+DOES: Redraws a frozen snapshot of the current world (same renderers as
+      drawGame(), without updateGame()), then overlays a semi-transparent
+      menu with Music/Sound toggles, Resume, and Main Menu buttons.
+WHY: Lets the player toggle audio or bail out without losing run state
+     (gs is left untouched, just not advanced).
+STEPS:
+  1. Draw background/pipes/coins/powerups/enemies/bullets/bird/particles/HUD
+     exactly once (no physics)
+  2. Draw dark overlay + PAUSED title
+  3. Resume -> screen=S.GAME; startMusic()
+  4. Main Menu -> stopMusic(); screen=S.WELCOME
+
+--- 4.9  Game-end overlays: drawGameOver() / drawLevelWon() -----------------------
+FILE: script.js
+CALLED BY: loop(), drawn on top of drawGame() only when gs.over or gs.won
+PARAMS: none | RETURNS: none
+DOES:
+  - drawGameOver(): shows final score/coins, and Retry / Menu / View High
+    Scores buttons. (The actual death bookkeeping — score history, coin
+    payout, achievement/challenge checks, high-score name entry — happens
+    inside takeDamage() the moment gs.hp reaches 0, not here; this screen
+    is purely the resulting UI.)
+  - drawLevelWon(): (Adventure only) shows score vs target, coins earned,
+    Next Level button (if levelId<10) or "ALL LEVELS COMPLETE!", plus
+    Level Select / Main Menu buttons.
+WHY: Terminal states of a run; both loop back into MODE_SELECT-reachable
+     screens or restart the same run via initGameState().
+STEPS:
+  1. Retry -> initGameState(gs.levelId,gs.mode); screen=S.GAME; startMusic()
+  2. Menu  -> stopMusic(); screen=S.WELCOME
+  3. (LevelWon) Next Level -> initGameState(gs.levelId+1,'adventure');
+     screen=S.GAME; startMusic()
+
+================================================================================
+STAGE 5 — SCREENS REACHABLE FROM THE HUB (not part of the linear play path,
+           but documented in the order a player is likely to open them)
+================================================================================
+
+--- 5.1  S.HIGH_SCORES ------------------------------------------------------------
+FILE: script.js — drawHighScores()
+CALLED BY: loop(); opened from Welcome ("Scores") or Game Over overlay
+PARAMS: none | RETURNS: none
+DOES: Two tabs — "Top 5" (save.highScores, medal colors for top 3) and
+      "Run History" (save.runHistory, last 10 runs with mode/score/bird/mods/date).
+WHY: Player-facing record of past performance; data written by
+     addHighScore() (called from takeDamage()) and the runHistory push
+     also inside takeDamage().
+STEPS: Tap tab buttons to switch hsTab; "< Back" -> screen=S.WELCOME
+
+--- 5.2  S.SETTINGS ---------------------------------------------------------------
+FILE: script.js — drawSettings()
+CALLED BY: loop(); opened from Welcome ("Settings") or Paused menu (indirectly
+           via Welcome only — Paused has its own inline toggles)
+PARAMS: none | RETURNS: none
+DOES: Scrollable list (settingsScroll, drag-to-scroll + ▲/▼ arrow buttons)
+      of toggle rows (Music, Sound, Screen Shake, Ghost Replay, Gap Preview,
+      Bird Trail, Colorblind, Combo Multiplier, Particles, Show FPS),
+      multi-choice rows (Haptic Strength: Off/Light/Strong; Graphics:
+      Low/Med/High), a link to Custom Audio, two volume sliders (Music/Sound),
+      and Export/Import Save buttons (JSON via prompt()).
+WHY: Central place for all persisted preferences in `save.settings`; every
+     toggle writes immediately via writeSave().
+STEPS: Each toggle button flips the corresponding save.settings.* boolean/
+       string and calls writeSave(); "Custom Audio ►" -> screen=S.AUDIO;
+       "< Back" -> screen=S.WELCOME, settingsScroll reset to 0
+
+--- 5.3  S.AUDIO (Custom Audio, sub-screen of Settings) ---------------------------
+FILE: script.js — drawAudio()
+CALLED BY: loop(); opened only from Settings ("Custom Audio ►")
+PARAMS: none | RETURNS: none
+DOES: Two tabs — Music (upload/remove a custom background track + trim bar)
+      and SFX (per-slot upload/remove for 7 sound effect keys).
+WHY: Lets a player personalize audio without touching source files; uses
+     the IndexedDB helpers defined in Stage 1.
+STEPS:
+  1. Upload Music -> file picker -> _saveClip('music',file) +
+     _blobToBuffer() -> customMusicBuffer set, showPopup()
+  2. Remove Custom Music -> _deleteClip('music'); customMusicBuffer=null;
+     restart music if playing
+  3. SFX tab: same pattern per key, stored under 'sfx_'+key
+  4. "< Back" -> screen=S.SETTINGS, trimState reset to null
+
+--- 5.4  S.ACHIEVEMENTS -----------------------------------------------------------
+FILE: script.js — drawAchievements()
+CALLED BY: loop(); opened from Welcome ("Achieve")
+PARAMS: none | RETURNS: none
+DOES: 2-column grid of all 20 ACHV entries, highlighted green with a
+      checkmark if save.achievements[id] is true.
+WHY: Read-only display; unlocking itself happens via unlockAchv()/
+     checkAchievements() called during gameplay (updateGame()/takeDamage()).
+STEPS: "< Back" -> screen=S.WELCOME (no other interaction on this screen)
+
+--- 5.5  S.CHALLENGE --------------------------------------------------------------
+FILE: script.js — drawChallenge()
+CALLED BY: loop(); opened from Welcome ("Challenge")
+PARAMS: none | RETURNS: none
+DOES: Calls refreshDailyChallenges() to ensure today's 3 challenges are
+      seeded, then renders each with description, coin reward, and
+      completed/in-progress status.
+WHY: Daily-engagement loop; challenge completion is checked elsewhere
+     (checkDailyChallenges(), called from takeDamage()) using deterministic
+     date-seeded selection so all players get the same 3 challenges per day.
+STEPS: "< Back" -> screen=S.WELCOME (no other interaction on this screen)
+
+================================================================================
+STAGE 6 — CROSS-CUTTING OVERLAYS (drawn every frame, on every screen)
+================================================================================
+
+FILE: script.js — drawPopup(), drawNameEntry(), drawConfetti(), drawTransition()
+CALLED BY: loop(), unconditionally, after the screen switch — every frame,
+           regardless of `screen` value
+PARAMS: none | RETURNS: none
+DOES:
+  - drawPopup(): fades out a transient message set by showPopup(msg)
+    (e.g. "Not enough coins!", achievement unlocks, challenge rewards).
+  - drawNameEntry(): if nameEntry.active, blocks input elsewhere and shows
+    the "New Top 5!" name-entry dialog backed by the hidden <input>.
+  - drawConfetti(): animates the confetti[] particle burst spawned by
+    spawnConfetti() on a non-adventure personal best.
+  - drawTransition(): fade-to-black/fade-in helper driven by goScreen()
+    (defined but not currently wired to any screen change in this build).
+WHY: These need to render above whatever screen is active, so they are
+     drawn last, every frame, independent of the screen switch.
