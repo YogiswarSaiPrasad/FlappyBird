@@ -457,6 +457,7 @@ let modRotateAt=20;       // score threshold for next modifier rotation
 // User-selected mods for the upcoming unlimited run; 'random' means auto-rotation
 let selectedMods=new Set();          // empty = random auto-rotation
 let unlimitedDropOpen=false;
+let unlimitedModScroll=0;
 let practiceMode=false;   // set in Unlimited Opts; unlimited lives, score not saved
 
 function pickMods(){
@@ -466,7 +467,11 @@ function pickMods(){
   activeMods.clear();
   const shuffled=[...ENDLESS_MODS].sort(()=>Math.random()-0.5);
   const count=1+Math.floor(Math.random()*2);
-  for(let i=0;i<count;i++) activeMods.add(shuffled[i]);
+  for(const mod of shuffled){
+    if(activeMods.size>=count)break;
+    if([...activeMods].some(active=>(MOD_CONFLICTS[active]||[]).includes(mod)))continue;
+    activeMods.add(mod);
+  }
   modRotateAt=gs.score+15+Math.floor(Math.random()*10);
   showPopup('Mode: '+[...activeMods].map(m=>MOD_LABELS[m]||m).join(' + '));
 }
@@ -551,6 +556,7 @@ function checkAchievements(){
   if(gs.score>=1) unlockAchv('first_pipe');
   if(gs.score>=10) unlockAchv('score_10');
   if(gs.mode==='unlimited'){
+    activeMods.forEach(mod=>achvStats.modsSeen.add(mod));
     if(gs.score>=50) unlockAchv('score_50');
     if(gs.score>=100) unlockAchv('score_100');
     if(activeMods.has('milestone')&&gs.score>0&&gs.score%10===0) unlockAchv('milestone_10');
@@ -624,10 +630,12 @@ function initGameState(levelId,mode){
   const startHp=mode==='survival'?5:save.selectedBird==='parrot'?2:1;
   // Gauntlet: generate 30 deterministic gap positions seeded by today's date
   let gauntletGaps=null;
+  const gauntletGap=Math.min(LEVELS[0].gap,Math.max(80,RH-120));
   if(mode==='gauntlet'){
     const seed=new Date().toISOString().slice(0,10).replace(/-/g,'').split('').reduce((a,c)=>a*31+c.charCodeAt(0),1);
     let s=seed;
-    gauntletGaps=Array.from({length:30},()=>{s=(s*1664525+1013904223)&0x7fffffff;return 60+(s%Math.round(RH*0.55));});
+    const gapRange=Math.max(1,Math.floor(RH-gauntletGap-120)+1);
+    gauntletGaps=Array.from({length:30},()=>{s=(s*1664525+1013904223)&0x7fffffff;return 60+(s%gapRange);});
   }
   gs={
     mode,levelId,level:lvl,bird:save.selectedBird,
@@ -649,6 +657,7 @@ function initGameState(levelId,mode){
     comboStreak:0, pbToastShown:false, trail:[], pipeRushMult:1,
     practice:(mode==='unlimited'&&practiceMode),
     gauntletGaps, gauntletPipe:0, // fixed pipe sequence for Gauntlet mode
+    gauntletGap,
     // weather
     rainDrops:Array.from({length:60},()=>({x:Math.random()*RW,y:Math.random()*RH,spd:8+Math.random()*6})),
     snowFlakes:Array.from({length:50},()=>({x:Math.random()*RW,y:Math.random()*RH,r:1+Math.random()*2,spd:1+Math.random()*2})),
@@ -996,10 +1005,10 @@ function spawnPipe(){
   if(gs.mode==='gauntlet'&&gs.gauntletGaps){
     if(gs.gauntletPipe>=gs.gauntletGaps.length)return; // all 30 spawned
     const topH=gs.gauntletGaps[gs.gauntletPipe++];
-    gs.pipes.push({x:RW,topH,gap:gs.level.gap,scored:false});
-    const gapMid=topH+gs.level.gap/2;
+    gs.pipes.push({x:RW,topH,gap:gs.gauntletGap,scored:false});
+    const gapMid=topH+gs.gauntletGap/2;
     const n=save.selectedBird==='sparrow'?6:3;
-    for(let i=0;i<n;i++) gs.coinItems.push({x:RW+12+i*16,y:gapMid+(Math.random()-0.5)*(gs.level.gap*0.5),collected:false});
+    for(let i=0;i<n;i++) gs.coinItems.push({x:RW+12+i*16,y:gapMid+(Math.random()-0.5)*(gs.gauntletGap*0.5),collected:false});
     return;
   }
   const pGap=activeMods.has('coin_frenzy')?Math.floor(gs.level.gap*0.85):gs.level.gap;
@@ -1086,7 +1095,11 @@ function takeDamage(){
 // Tap/spacebar handler: starts game on first input, applies flap impulse, fires if shooting active
 function playerFlap(){
   if(gs.over||gs.won)return;
-  if(!gs.started){gs.started=true;startMusic();requestWakeLock();}
+  if(!gs.started){
+    gs.started=true;
+    if(gs.mode==='unlimited'&&selectedMods.size===0&&activeMods.size===0)pickMods();
+    startMusic();requestWakeLock();
+  }
   // Owl active: freeze pipes for 2s once per game
   if(save.selectedBird==='owl'&&owlFreezeLeft>0&&gs.started){
     owlFreezeLeft=0; owlFreezeTimer=120;
@@ -1098,7 +1111,9 @@ function playerFlap(){
   if(save.selectedBird==='flamingo'){ isHolding=true; holdStartTime=gs.frameCount; }
   // Eagle: begin tracking hold for charge
   if(save.selectedBird==='eagle'){ isHolding=true; holdStartTime=gs.frameCount; }
-  const impulse=(save.selectedBird==='eagle'&&gs.velocity>3)?-5.2:-4.3;
+  const fallingHard=activeMods.has('reverse')?gs.velocity<-3:gs.velocity>3;
+  const flapStrength=(save.selectedBird==='eagle'&&fallingHard)?5.2:4.3;
+  const impulse=activeMods.has('reverse')?flapStrength:-flapStrength;
   gs.velocity=impulse;SFX.flap();
   if(gs.canShoot&&gs.shootCooldown<=0){gs.bullets.push({x:BX+22,y:gs.birdY});gs.shootCooldown=18;SFX.shoot();}
 }
@@ -1106,7 +1121,7 @@ function playerRelease(){
   if(!gs.started||gs.over||gs.won){isHolding=false;return;}
   if(save.selectedBird==='eagle'&&isHolding){
     const held=(gs.frameCount-holdStartTime)/60; // seconds held
-    if(held>=0.4){ gs.velocity=-7.5; SFX.flap(); achvStats.eagleChargeCount++; spawnParticles(BX,gs.birdY,'#FFD700',10); }
+    if(held>=0.4){ gs.velocity=activeMods.has('reverse')?7.5:-7.5; SFX.flap(); achvStats.eagleChargeCount++; spawnParticles(BX,gs.birdY,'#FFD700',10); }
   }
   isHolding=false;
 }
@@ -1120,7 +1135,7 @@ function updateGame(){
   if(gs.invincible>0)gs.invincible--;if(gs.shieldTimer>0)gs.shieldTimer--;if(gs.magnetTimer>0)gs.magnetTimer--;if(gs.shootCooldown>0)gs.shootCooldown--;
   if(gs.mode==='time_trial'){gs.timeLeft--;if(gs.timeLeft<=0){gs.over=true;stopMusic();save.coins+=gs.sessionCoins;if(!save.runHistory)save.runHistory=[];save.runHistory.unshift({mode:'time_trial',score:gs.score,bird:gs.bird,mods:[...activeMods].join(','),date:new Date().toLocaleDateString()});save.runHistory=save.runHistory.slice(0,10);writeSave();return;}}
   if(gs.mode==='unlimited') gs.speedMult=1+gs.frameCount/3600; // speed ramps gradually
-  gs.pipeSpeed=gs.level.pipeSpeed*gs.speedMult*(activeMods.has('pipe_rush')?gs.pipeRushMult:1);
+  gs.pipeSpeed=gs.level.pipeSpeed*gs.speedMult*(activeMods.has('pipe_rush')?gs.pipeRushMult:1)*(activeMods.has('slow_miss')?0.65:1);
   // spawn when last pipe has scrolled exactly spawnDist pixels � guarantees equal visual spacing
   const spawnDist=gs.level.interval*gs.level.pipeSpeed;
   const lastPipe=gs.pipes.length>0?gs.pipes[gs.pipes.length-1]:null;
@@ -1128,7 +1143,8 @@ function updateGame(){
   if(gs.level.hasEnemies&&!gs.boss&&gs.frameCount%220===0) spawnEnemy(); // ~3.5 s intervals
   if(gs.level.hasBoss&&!gs.bossSpawned&&gs.score>=20){gs.bossSpawned=true;spawnBoss();}
   if(gs.level.bg==='day'||gs.level.bg==='sunset') moveClouds();
-  const grav=activeMods.has('low_grav')?0.12:(save.selectedBird==='flamingo'?0.22:0.35); // low_grav / flamingo reduce gravity
+  const gravity=activeMods.has('low_grav')?0.12:(save.selectedBird==='flamingo'?0.22:0.35);
+  const grav=activeMods.has('reverse')?-gravity:gravity;
   gs.velocity+=grav;gs.birdY+=gs.velocity;
   for(const p of gs.pipes){
     if(p.sinPhase!==undefined) p.topH=p.baseTopH+Math.sin(gs.frameCount*0.04+p.sinPhase)*28; // moving pipes oscillate
@@ -1154,6 +1170,7 @@ function updateGame(){
       }
     }
   }
+  if(gs.mode==='unlimited'&&selectedMods.size===0&&gs.score>=modRotateAt)pickMods();
   gs.pipes=gs.pipes.filter(p=>p.x+50>0);
   // coins: magnetic pull (90px) or direct touch collection
   for(const c of gs.coinItems){
@@ -1212,7 +1229,7 @@ function updateGame(){
   }
   gs.enemyBullets=gs.enemyBullets.filter(b=>!b.hit&&b.x>-20&&b.x<RW+20&&b.y>-20&&b.y<RH+20);
   // pipe AABB collision — uses per-pipe gap; also checks double_gap barrier
-  for(const p of gs.pipes){const bL=BX-BR,bR2=BX+BR,bT=gs.birdY-BR,bBot=gs.birdY+BR,pGap=p.gap||gs.level.gap,gapY=p.topH+pGap;if(bR2>p.x&&bL<p.x+50&&(bT<p.topH||bBot>gapY)){takeDamage();break;}if(p.barrier){const bY=p.barrier.y,bH=p.barrier.h;if(bR2>p.x&&bL<p.x+50&&bT<bY+bH&&bBot>bY){takeDamage();break;}}}
+  for(const p of gs.pipes){if(p.ghostPipe)continue;const bL=BX-BR,bR2=BX+BR,bT=gs.birdY-BR,bBot=gs.birdY+BR,pGap=p.gap||gs.level.gap,gapY=p.topH+pGap;if(bR2>p.x&&bL<p.x+50&&(bT<p.topH||bBot>gapY)){takeDamage();break;}if(p.barrier){const bY=p.barrier.y,bH=p.barrier.h;if(bR2>p.x&&bL<p.x+50&&bT<bY+bH&&bBot>bY){takeDamage();break;}}}
   for(const e of gs.enemies){if(!e.dead&&Math.sqrt((BX-e.x)**2+(gs.birdY-e.y)**2)<BR+16) takeDamage();}
   if(gs.boss&&!gs.boss.dead&&Math.sqrt((BX-gs.boss.x)**2+(gs.birdY-gs.boss.y)**2)<BR+42) takeDamage();
   // floor/ceiling – reverse gravity flips which kills you
@@ -1224,8 +1241,8 @@ function updateGame(){
     if(gs.birdY+BR>RH){gs.birdY=RH-BR;gs.velocity=0;}
   }
   // ghost: check if player is ahead of ghost for achievement
-  if(save.settings.ghost&&ghostPlayback.length>0&&ghostFrame<ghostPlayback.length){
-    if(gs.score>0&&ghostFrame>ghostPlayback.length){ achvStats.ghostBeaten=true; }
+  if(save.settings.ghost&&ghostPlayback.length>0&&ghostFrame>=ghostPlayback.length){
+    if(gs.score>0){ achvStats.ghostBeaten=true; }
   }
 }
 
@@ -1479,12 +1496,18 @@ function drawUnlimitedOpts(){
   pushBtn(ddX,ddY,ddW,ddH,()=>{unlimitedDropOpen=!unlimitedDropOpen;SFX.click();});
 
   // dropdown list
-  const rowH=44,listY=ddY+ddH+2;
+  const rowH=34,visibleRows=8,listY=ddY+ddH+2;
+  const listViewportH=rowH*visibleRows;
   if(unlimitedDropOpen){
-    const listH=ENDLESS_MODS.length*rowH+8;
+    const listH=listViewportH+8;
+    const maxScroll=Math.max(0,ENDLESS_MODS.length*rowH-listViewportH);
+    unlimitedModScroll=Math.max(0,Math.min(maxScroll,unlimitedModScroll));
     roundRect(ddX,listY,ddW,listH,10,'rgba(10,10,30,0.93)','#8E44AD',1.5);
+    ctx.save();
+    ctx.beginPath();ctx.rect(ddX+2,listY+4,ddW-4,listViewportH);ctx.clip();
     ENDLESS_MODS.forEach((mod,i)=>{
-      const ry=listY+4+i*rowH;
+      const ry=listY+4+i*rowH-unlimitedModScroll;
+      if(ry<listY+4||ry+rowH>listY+4+listViewportH)return;
       const on=selectedMods.has(mod);
       // a mod is blocked if any selected mod lists it as a conflict
       const blocked=!on&&[...selectedMods].some(s=>(MOD_CONFLICTS[s]||[]).includes(mod));
@@ -1513,10 +1536,13 @@ function drawUnlimitedOpts(){
         });
       }
     });
+    ctx.restore();
+    if(unlimitedModScroll>0){ctx.fillStyle='#aaa';ctx.font='11px Arial';ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText('\u25b2',ddX+ddW-8,listY+11);}
+    if(unlimitedModScroll<maxScroll){ctx.fillStyle='#aaa';ctx.font='11px Arial';ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText('\u25bc',ddX+ddW-8,listY+listH-11);}
   }
 
   // summary
-  const belowList=unlimitedDropOpen?listY+ENDLESS_MODS.length*rowH+8:listY;
+  const belowList=unlimitedDropOpen?listY+listViewportH+8:listY;
   const summary=selectedMods.size===0?'Random auto-rotation (no fixed mods)':[...selectedMods].map(m=>MOD_LABELS[m]||m).join(' + ');
   ctx.fillStyle='#FFD700';ctx.font='13px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.fillText('Active: '+summary,W/2,belowList+20);
@@ -1910,6 +1936,11 @@ canvas.addEventListener('pointermove',e=>{
         const maxScroll=Math.max(0,912-H);
         settingsScroll=Math.max(0,Math.min(maxScroll,settingsScroll+delta));
       }
+      if(screen===S.UNLIMITED_OPTS&&unlimitedDropOpen){
+        const rowH=34,visibleRows=8;
+        const maxScroll=Math.max(0,ENDLESS_MODS.length*rowH-rowH*visibleRows);
+        unlimitedModScroll=Math.max(0,Math.min(maxScroll,unlimitedModScroll-dy/uiS));
+      }
       swipeStartY=e.clientY; // incremental — update base each move
     }
   }
@@ -1930,6 +1961,9 @@ canvas.addEventListener('pointerup',e=>{
   }
   // Vertical swipe on settings = scroll (not a tap)
   if(screen===S.SETTINGS && absDy>12){
+    scrollDragActive=false; return;
+  }
+  if(screen===S.UNLIMITED_OPTS&&unlimitedDropOpen&&absDy>12){
     scrollDragActive=false; return;
   }
   scrollDragActive=false;
